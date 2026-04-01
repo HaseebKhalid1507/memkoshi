@@ -41,9 +41,8 @@ class Memkoshi:
         if self._initialized:
             return
             
-        # Initialize storage backend
-        db_path = self.storage_path / "memkoshi.db"
-        self.storage = SQLiteBackend(str(db_path))
+        # Initialize storage backend (SQLiteBackend expects a directory, not a file path)
+        self.storage = SQLiteBackend(str(self.storage_path))
         self.storage.initialize()
         
         # Initialize extractor
