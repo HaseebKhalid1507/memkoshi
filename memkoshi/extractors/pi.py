@@ -13,7 +13,7 @@ from ..core.memory import Memory, MemoryCategory, MemoryConfidence
 
 logger = logging.getLogger(__name__)
 
-EXTRACTION_PROMPT = 'Extract memories as JSON array. Categories: events/preferences/entities/cases/patterns. Confidence: high/medium/low. Each: {"category":"...","topic":"short-topic","title":"key fact","abstract":"one sentence","content":"full context","confidence":"...","source_quotes":["exact quote"],"related_topics":["..."]}. ONLY JSON array, no markdown. Text: '
+EXTRACTION_PROMPT = 'Extract memories from this session log as a JSON array. This is a raw agent session log with USER messages, ASSISTANT responses, and tool calls. Find: decisions made, preferences stated, people/companies mentioned, bugs fixed, processes defined. Categories: events/preferences/entities/cases/patterns. Confidence: high/medium/low. Each: {"category":"...","topic":"short-topic","title":"key fact","abstract":"one sentence","content":"full context with reasoning","confidence":"...","source_quotes":["exact quote from log"],"related_topics":["..."]}. ONLY JSON array, no markdown. Session log: '
 
 CATEGORY_MAP = {
     "events": MemoryCategory.EVENTS,

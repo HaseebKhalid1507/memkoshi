@@ -124,7 +124,7 @@ class APIExtractor(MemoryExtractor):
     
     def _build_prompt(self, text: str) -> str:
         """Build extraction prompt."""
-        return f"""You are a memory extraction system. Extract structured memories from the following conversation/session text.
+        return f"""You are a memory extraction system. Extract structured memories from the following session log. This may be a raw agent session log with USER/ASSISTANT messages and tool calls (BASH, WRITE, EDIT, READ), or a plain text summary. Find all significant information worth remembering.
 
 CATEGORIES:
 - events: Decisions, milestones, agreements ("decided to", "launched", "agreed")
