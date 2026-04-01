@@ -111,12 +111,58 @@ for memory in results:
 
 ## MCP Server Integration
 
-Memkoshi includes an MCP server for seamless agent integration:
+Memkoshi ships a full MCP server with 7 tools. Any MCP-compatible agent gets persistent memory out of the box.
+
+### Claude Code / pi
+
+Add to your `~/.claude/settings.json` or `.pi/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "memkoshi": {
+      "command": "memkoshi",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+That's it. Your agent now has access to:
+
+| Tool | What It Does |
+|------|-------------|
+| `memory_commit` | Extract memories from conversation text |
+| `memory_recall` | Search memories by meaning (4-layer VelociRAG) |
+| `memory_staged` | List memories pending review |
+| `memory_approve` | Approve a staged memory |
+| `memory_reject` | Reject a staged memory |
+| `memory_boot` | Get boot context (session count, handoff, recent sessions) |
+| `memory_stats` | Storage statistics |
+
+### Custom Storage Path
 
 ```bash
-memkoshi serve  # Starts MCP server
-# Connect any MCP-compatible agent for automatic memory integration
+MEMKOSHI_STORAGE=~/my-agent/.memkoshi memkoshi serve
 ```
+
+### LangChain / Custom Agents
+
+```python
+from memkoshi import Memkoshi
+
+# Drop this into any agent loop
+m = Memkoshi("~/.memkoshi")
+m.init()
+
+# After each conversation turn
+m.commit(conversation_text)
+
+# Before each response
+context = m.recall(user_query, limit=5)
+```
+
+No daemon. No background process. No config files beyond the MCP JSON. It just works.
 
 ## vs. The Competition
 
