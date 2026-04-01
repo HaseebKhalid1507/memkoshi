@@ -12,23 +12,14 @@ from .search.engine import MemkoshiSearch
 class Memkoshi:
     """Main API class for Memkoshi memory system."""
     
-    def __init__(self, storage_path: str, extractor: str = "hybrid",
-                 provider: str = "anthropic", model: str = None, api_key: str = None):
+    def __init__(self, storage_path: str):
         """Initialize Memkoshi with a storage path.
         
         Args:
             storage_path: Path to directory for storing all Memkoshi data.
-            extractor: Extractor to use — "hybrid" (default, local) or "api" (LLM).
-            provider: API provider — "anthropic" or "openai" (only used if extractor="api").
-            model: Model override (default: claude-sonnet-4-20250514 / gpt-4o-mini).
-            api_key: API key override (default: reads from env var).
         """
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
-        self._extractor_name = extractor
-        self._provider = provider
-        self._model = model
-        self._api_key = api_key
         
         # Components will be initialized on init()
         self.storage = None
@@ -47,15 +38,7 @@ class Memkoshi:
         self.storage.initialize()
         
         # Initialize extractor
-        if self._extractor_name == "api":
-            from .extractors.api import APIExtractor
-            extractor = APIExtractor(
-                provider=self._provider,
-                model=self._model,
-                api_key=self._api_key,
-            )
-        else:
-            extractor = HybridExtractor()
+        extractor = HybridExtractor()
         extractor.initialize()
         
         # Initialize pipeline
@@ -244,17 +227,10 @@ class Memkoshi:
         Args:
             memory_id: ID of the memory to reject.
             reason: Reason for rejection.
-        
-        Raises:
-            ValueError: If memory_id not found in staging.
         """
         self._ensure_initialized()
         
-        # Verify it exists in staging
-        staged = self.storage.list_staged()
-        if not any(m.id == memory_id for m in staged):
-            raise ValueError(f"Staged memory {memory_id} not found")
-        
+        # Reject the memory
         self.storage.reject_memory(memory_id, reason)
     
     def approve_all(self, reviewer: str = "api") -> int:

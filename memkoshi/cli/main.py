@@ -42,8 +42,11 @@ def init(ctx):
 @click.argument("text", required=False)
 @click.option("--file", "-f", type=click.Path(exists=True), help="Read from file")
 @click.option("--json", "output_json", is_flag=True, help="Output JSON format")
+@click.option("--extractor", "-e", default="hybrid", type=click.Choice(["hybrid", "api"]), help="Extractor: hybrid (local) or api (LLM)")
+@click.option("--provider", default="anthropic", type=click.Choice(["anthropic", "openai"]), help="API provider")
+@click.option("--model", default=None, help="Model override")
 @click.pass_context
-def commit(ctx, text, file, output_json):
+def commit(ctx, text, file, output_json, extractor, provider, model):
     """Extract memories from session text and stage for review."""
     storage = ctx.obj['storage']
     storage.initialize()
@@ -64,10 +67,14 @@ def commit(ctx, text, file, output_json):
         click.echo("Error: empty input", err=True)
         sys.exit(1)
     
-    # Run the pipeline
-    extractor = HybridExtractor()
-    extractor.initialize()
-    pipeline = MemoryPipeline(storage, extractor)
+    # Select extractor
+    if extractor == "api":
+        from ..extractors.api import APIExtractor
+        ext = APIExtractor(provider=provider, model=model)
+    else:
+        ext = HybridExtractor()
+    ext.initialize()
+    pipeline = MemoryPipeline(storage, ext)
     result = pipeline.process(content)
     
     # Update session tracking in context if memories were extracted
@@ -96,7 +103,8 @@ def commit(ctx, text, file, output_json):
             for err in result['validation_errors']:
                 click.echo(f"  warning: {err}", err=True)
         if result['staged_count'] > 0:
-            click.echo("\nHint: Run 'memkoshi review' to approve or reject staged memories")
+            click.echo("\nHint: Run 'memkoshi review' to approve staged memories.")
+            click.echo("      Memories are only searchable via 'memkoshi recall' after approval.")
 
 @cli.command()
 @click.option("--limit", "-n", default=10, help="Number of memories to review")

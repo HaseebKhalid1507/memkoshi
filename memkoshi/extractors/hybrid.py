@@ -28,7 +28,7 @@ class HybridExtractor(MemoryExtractor):
                 r'\bshould\s+(always|never)\b',
             ],
             MemoryCategory.PREFERENCES: [
-                r'\b(prefer|like to|always use|hate|never)\b',
+                r'\b(prefers?|like to|always use|hate|never)\b',
                 r'\bprefers?\s+\w+\s+(over|to)\b',  # "prefers X over Y" or "prefers X to Y"
                 r'\b(customer|client|user)\s+prefers?\b',
                 r'\b(we|I|team)\s+likes?\b',  # Fixed: likes? to match both like and likes
@@ -197,7 +197,7 @@ class HybridExtractor(MemoryExtractor):
         
         elif category == MemoryCategory.PREFERENCES:
             # Look for what is preferred
-            match = re.search(r'(prefer|like to|always use|hate|never)\s+(?:using\s+)?(\w+)', sentence, re.IGNORECASE)
+            match = re.search(r'(prefers?|like to|always use|hate|never)\s+(?:using\s+)?(\w+)', sentence, re.IGNORECASE)
             if match:
                 return match.group(2).lower()
             # Look for what is liked
