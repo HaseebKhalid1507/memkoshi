@@ -17,6 +17,9 @@ try:
     from velocirag.graph import GraphStore, Node, Edge, NodeType, RelationType
     from velocirag.metadata import MetadataStore
     from velocirag.unified import UnifiedSearch
+    from velocirag.reranker import Reranker
+    from velocirag.analyzers import TemporalAnalyzer, TopicAnalyzer, SemanticAnalyzer
+    from velocirag.tracker import UsageTracker
     HAS_VELOCIRAG = True
 except ImportError:
     HAS_VELOCIRAG = False
@@ -103,13 +106,19 @@ class MemkoshiSearch:
         self._metadata.initialize()
 
         # Searcher (vector + keyword fusion)
-        self._searcher = Searcher(self._store, self._embedder)
+        # Reranker: cross-encoder TinyBERT for result reranking after RRF fusion
+        self._reranker = Reranker()
+        self._searcher = Searcher(self._store, self._embedder, reranker=self._reranker.rerank)
+
+        # Usage tracker
+        self._tracker = UsageTracker(self._metadata)
 
         # Unified search (all 4 layers + RRF fusion)
         self._unified = UnifiedSearch(
             self._searcher,
             graph_store=self._graph,
             metadata_store=self._metadata,
+            tracker=self._tracker,
         )
 
     def index_memory(self, memory: Memory):
@@ -252,7 +261,33 @@ class MemkoshiSearch:
             if len(final_results) >= limit:
                 break
 
+        # Log search hits for usage tracking
+        if not self._use_fallback and self._tracker:
+            for r in final_results:
+                try:
+                    self._tracker.log_search_hit(r["id"], query)
+                except Exception:
+                    pass
+
         return final_results
+
+    def get_most_accessed(self, limit: int = 10) -> List[Dict]:
+        """Get most frequently accessed memories."""
+        if self._use_fallback or not self._tracker:
+            return []
+        return self._tracker.get_most_accessed(limit)
+
+    def get_never_accessed(self) -> List[Dict]:
+        """Get memories that have never been searched."""
+        if self._use_fallback or not self._tracker:
+            return []
+        return self._tracker.get_never_accessed()
+
+    def get_usage_trends(self, days: int = 30) -> Dict:
+        """Get usage trends over time."""
+        if self._use_fallback or not self._tracker:
+            return {}
+        return self._tracker.get_usage_trends(days)
 
     def reindex_all(self, storage: SQLiteBackend) -> int:
         """Rebuild all 4 layers from permanent memories."""
@@ -271,6 +306,35 @@ class MemkoshiSearch:
                 count += 1
             except Exception as e:
                 logger.error(f"Failed to index memory {memory.id}: {e}")
+
+        # Run graph analyzers for rich connections between memories
+        if count > 1:
+            try:
+                all_nodes = list(self._graph.get_all_nodes()) if hasattr(self._graph, 'get_all_nodes') else []
+                if all_nodes:
+                    # Temporal: connect memories close in time
+                    temporal = TemporalAnalyzer(window_days=14)
+                    new_nodes, new_edges = temporal.analyze(all_nodes)
+                    for edge in new_edges:
+                        self._graph.add_edge(edge)
+
+                    # Topic: cluster memories by topic
+                    topic = TopicAnalyzer(n_topics=min(10, count))
+                    new_nodes, new_edges = topic.analyze(all_nodes)
+                    for node in new_nodes:
+                        self._graph.add_node(node)
+                    for edge in new_edges:
+                        self._graph.add_edge(edge)
+
+                    # Semantic: connect similar memories
+                    semantic = SemanticAnalyzer(self._embedder, threshold=0.6)
+                    new_nodes, new_edges = semantic.analyze(all_nodes)
+                    for edge in new_edges:
+                        self._graph.add_edge(edge)
+
+                    logger.info(f"Graph enriched: temporal + topic + semantic analyzers")
+            except Exception as e:
+                logger.warning(f"Graph enrichment failed (non-fatal): {e}")
 
         logger.info(f"Reindexed {count} memories across 4 layers")
         return count

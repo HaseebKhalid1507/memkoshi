@@ -289,13 +289,22 @@ class Memkoshi:
         
         stats["memory_categories"] = category_counts
         
-        # Rename keys for API consistency
+        # Usage stats from search tracker
+        most_accessed = []
+        never_accessed_count = 0
+        if self.search and hasattr(self.search, 'get_most_accessed'):
+            most_accessed = self.search.get_most_accessed(5)
+            never_accessed = self.search.get_never_accessed()
+            never_accessed_count = len(never_accessed)
+
         return {
             "total_memories": stats.get("memories_count", 0),
             "staged_memories": stats.get("staged_count", 0),
             "session_count": stats.get("sessions_count", 0),
             "database_size": stats.get("database_size_kb", 0),
-            "memory_categories": category_counts
+            "memory_categories": category_counts,
+            "most_accessed": [{"id": m.get("filename", ""), "title": m.get("title", ""), "hits": m.get("search_hits", 0)} for m in most_accessed],
+            "never_accessed_count": never_accessed_count,
         }
     
     def close(self) -> None:
