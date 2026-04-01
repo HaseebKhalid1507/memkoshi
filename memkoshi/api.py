@@ -118,7 +118,10 @@ class Memkoshi:
                     "content": full_memory.content,
                     "confidence": full_memory.confidence.value,
                     "created": full_memory.created.isoformat() if full_memory.created else '',
-                    "score": result.get('score', 0.0)
+                    "score": result.get('score', 0.0),
+                    "source_layers": result.get('source_layers', ''),
+                    "rrf_score": result.get('rrf_score', 0),
+                    "graph_connections": result.get('graph_connections', []),
                 })
             else:
                 # Fallback to search result data
