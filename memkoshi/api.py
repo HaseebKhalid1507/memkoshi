@@ -54,6 +54,9 @@ class Memkoshi:
                 model=self._model,
                 api_key=self._api_key,
             )
+        elif self._extractor_name == "pi":
+            from .extractors.pi import PiExtractor
+            extractor = PiExtractor(model=self._model)
         else:
             extractor = HybridExtractor()
         extractor.initialize()

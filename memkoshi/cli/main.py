@@ -42,7 +42,7 @@ def init(ctx):
 @click.argument("text", required=False)
 @click.option("--file", "-f", type=click.Path(exists=True), help="Read from file")
 @click.option("--json", "output_json", is_flag=True, help="Output JSON format")
-@click.option("--extractor", "-e", default="hybrid", type=click.Choice(["hybrid", "api"]), help="Extractor: hybrid (local) or api (LLM)")
+@click.option("--extractor", "-e", default="hybrid", type=click.Choice(["hybrid", "pi", "api"]), help="Extractor: hybrid (local), pi (OAuth), or api (API key)")
 @click.option("--provider", default="anthropic", type=click.Choice(["anthropic", "openai"]), help="API provider")
 @click.option("--model", default=None, help="Model override")
 @click.pass_context
@@ -71,6 +71,9 @@ def commit(ctx, text, file, output_json, extractor, provider, model):
     if extractor == "api":
         from ..extractors.api import APIExtractor
         ext = APIExtractor(provider=provider, model=model)
+    elif extractor == "pi":
+        from ..extractors.pi import PiExtractor
+        ext = PiExtractor(model=model)
     else:
         ext = HybridExtractor()
     ext.initialize()
