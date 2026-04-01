@@ -10,6 +10,16 @@ Memkoshi is a production-grade memory library with **three-tier extraction archi
 
 No vendor lock-in. No API requirements. No bullshit.
 
+### 🔗 One Memory, Every Agent
+
+Using Claude Code *and* Gemini CLI? Memkoshi is the shared memory layer between them. Both agents connect to the same `~/.memkoshi` store via MCP — Claude learns something in the morning, Gemini remembers it by afternoon. **Agent-agnostic memory that works across your entire toolkit.**
+
+```
+Claude Code ──→ memkoshi ──→ ┌──────────────┐
+                              │  ~/.memkoshi  │  shared memory store
+Gemini CLI  ──→ memkoshi ──→ └──────────────┘
+```
+
 ```bash
 # 30-second demo that actually works
 pip install memkoshi
@@ -163,6 +173,17 @@ context = m.recall(user_query, limit=5)
 ```
 
 No daemon. No background process. No config files beyond the MCP JSON. It just works.
+
+### Multi-Agent, One Memory
+
+The real power: point multiple agents at the same storage. Claude Code and Gemini CLI both get MCP config → both read and write the same memories → knowledge transfers automatically between tools.
+
+```bash
+# Same store, both agents
+# Claude Code:  ~/.claude/settings.json → memkoshi serve
+# Gemini CLI:   ~/.gemini/settings.json → memkoshi serve
+# Result: shared persistent memory across all your AI tools
+```
 
 ## vs. The Competition
 
