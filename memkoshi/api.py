@@ -1,7 +1,9 @@
 """Main Memkoshi API for programmatic access."""
 
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone, timedelta
 from .storage.sqlite import SQLiteBackend
 from .core.pipeline import MemoryPipeline
 from .core.context import BootContext
@@ -129,6 +131,7 @@ class Memkoshi:
             full_memory = self.storage.get_memory(memory_id)
             
             if full_memory:
+                age = self._memory_age_days(full_memory.created)
                 memories.append({
                     "id": full_memory.id,
                     "category": full_memory.category.value,
@@ -141,6 +144,8 @@ class Memkoshi:
                     "source_layers": result.get('source_layers', ''),
                     "rrf_score": result.get('rrf_score', 0),
                     "graph_connections": result.get('graph_connections', []),
+                    "age_days": age,
+                    "staleness_caveat": self.staleness_caveat(age),
                 })
             else:
                 # Fallback to search result data
@@ -308,6 +313,264 @@ class Memkoshi:
             "most_accessed": [{"id": m.get("filename", ""), "title": m.get("title", ""), "hits": m.get("search_hits", 0)} for m in most_accessed],
             "never_accessed_count": never_accessed_count,
         }
+    
+    # ── Feature: Bulk Document Import ──────────────────────────────────
+    
+    def ingest(self, source: str, chunk_size: int = 2000, overlap: int = 200,
+               auto_approve: bool = False) -> Dict[str, Any]:
+        """Bulk import a document or text into memory.
+        
+        Splits large text into overlapping chunks, extracts memories from each,
+        deduplicates across chunks, and stages them.
+        
+        Args:
+            source: File path or raw text. If path exists on disk, reads it.
+            chunk_size: Max characters per chunk (default 2000).
+            overlap: Character overlap between chunks to avoid boundary splits.
+            auto_approve: If True, approve all extracted memories immediately.
+            
+        Returns:
+            Dictionary with import statistics.
+        """
+        self._ensure_initialized()
+        
+        # Resolve source: file path or raw text
+        source_path = Path(source).expanduser()
+        if source_path.exists() and source_path.is_file():
+            text = source_path.read_text(encoding='utf-8', errors='replace')
+            source_name = source_path.name
+        else:
+            text = source
+            source_name = f"text_{len(text)}_chars"
+        
+        if not text.strip():
+            return {"source": source_name, "chunks": 0, "extracted": 0,
+                    "staged": 0, "duplicates_skipped": 0}
+        
+        # Split into chunks
+        chunks = self._chunk_text(text, chunk_size, overlap)
+        
+        total_extracted = 0
+        total_staged = 0
+        total_dupes = 0
+        
+        for chunk in chunks:
+            result = self.pipeline.process(chunk)
+            total_extracted += result["extracted_count"]
+            total_staged += result["staged_count"]
+            total_dupes += result["extracted_count"] - result["staged_count"]
+        
+        approved = 0
+        if auto_approve and total_staged > 0:
+            approved = self.approve_all("bulk_import")
+        
+        return {
+            "source": source_name,
+            "chunks": len(chunks),
+            "extracted": total_extracted,
+            "staged": total_staged,
+            "duplicates_skipped": total_dupes,
+            "approved": approved,
+        }
+    
+    def _chunk_text(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+        """Split text into overlapping chunks at paragraph boundaries."""
+        if len(text) <= chunk_size:
+            return [text]
+        
+        chunks = []
+        # Split on double newlines (paragraphs) first
+        paragraphs = re.split(r'\n\s*\n', text)
+        
+        current_chunk = ""
+        for para in paragraphs:
+            if len(current_chunk) + len(para) + 2 > chunk_size and current_chunk:
+                chunks.append(current_chunk.strip())
+                # Keep overlap from end of previous chunk
+                if overlap > 0 and len(current_chunk) > overlap:
+                    current_chunk = current_chunk[-overlap:] + "\n\n" + para
+                else:
+                    current_chunk = para
+            else:
+                current_chunk = current_chunk + "\n\n" + para if current_chunk else para
+        
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        return chunks
+    
+    # ── Feature: Staleness Caveats ─────────────────────────────────────
+    
+    @staticmethod
+    def _memory_age_days(created_str) -> int:
+        """Calculate days since memory was created."""
+        try:
+            if isinstance(created_str, datetime):
+                created = created_str
+            else:
+                created = datetime.fromisoformat(str(created_str).replace('Z', '+00:00'))
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            delta = datetime.now(timezone.utc) - created
+            return max(0, delta.days)
+        except (ValueError, TypeError, AttributeError):
+            return -1  # Unknown age
+    
+    @staticmethod
+    def staleness_caveat(age_days: int) -> str:
+        """Generate a staleness warning for old memories.
+        
+        Returns empty string for fresh memories (<=1 day).
+        """
+        if age_days <= 1:
+            return ""
+        if age_days <= 7:
+            return f"This memory is {age_days} days old. Verify before acting on it."
+        if age_days <= 30:
+            return (f"This memory is {age_days} days old. Claims about code, prices, "
+                    f"or system state may be outdated. Verify against current data.")
+        return (f"This memory is {age_days} days old. Treat as historical context only — "
+                f"do NOT assert as current fact without verification.")
+    
+    # ── Feature: Tiered Boot ────────────────────────────────────────
+    
+    def boot_tiered(self, tier: int = 0, limit: int = 50) -> Dict[str, Any]:
+        """Progressive memory loading by importance tiers.
+        
+        Tier 0 (boot): High-importance memories only (importance >= 0.7)
+                       + preferences + cases. Lean and fast.
+        Tier 1 (warm): Medium-importance (>= 0.5). Loaded after boot.
+        Tier 2 (full): Everything. On-demand only.
+        
+        Args:
+            tier: 0 (critical), 1 (medium), 2 (all)
+            limit: Max memories per tier.
+            
+        Returns:
+            Dict with memories, tier info, and stats.
+        """
+        self._ensure_initialized()
+        
+        all_memories = self.storage.list_memories(limit=5000)
+        
+        tier_config = {
+            0: {"min_importance": 0.7, "categories": None,  # All cats above threshold
+                "priority_categories": ["preferences", "cases"]},  # Always include these
+            1: {"min_importance": 0.5, "categories": None, "priority_categories": []},
+            2: {"min_importance": 0.0, "categories": None, "priority_categories": []},
+        }
+        
+        config = tier_config.get(tier, tier_config[2])
+        min_imp = config["min_importance"]
+        priority_cats = config["priority_categories"]
+        
+        # Filter by importance threshold OR priority category
+        filtered = []
+        for m in all_memories:
+            if m.importance >= min_imp:
+                filtered.append(m)
+            elif m.category.value in priority_cats:
+                filtered.append(m)
+        
+        # Sort by importance descending, then recency
+        filtered.sort(key=lambda m: (m.importance, m.created.isoformat() if m.created else ''), reverse=True)
+        
+        # Apply limit
+        tier_memories = filtered[:limit]
+        
+        # Add staleness info
+        results = []
+        for m in tier_memories:
+            age = self._memory_age_days(m.created)
+            results.append({
+                "id": m.id,
+                "category": m.category.value,
+                "topic": m.topic,
+                "title": m.title,
+                "content": m.content,
+                "importance": m.importance,
+                "confidence": m.confidence.value,
+                "age_days": age,
+                "staleness_caveat": self.staleness_caveat(age),
+            })
+        
+        return {
+            "tier": tier,
+            "memories": results,
+            "count": len(results),
+            "total_available": len(all_memories),
+            "filtered_by_importance": f">={min_imp}",
+            "has_more": len(filtered) > limit,
+        }
+    
+    # ── Feature: Pattern Learning ───────────────────────────────────
+    
+    def record_access(self, memory_id: str, access_type: str = "recall") -> None:
+        """Record that a memory was accessed. Feeds the learning loop.
+        
+        Args:
+            memory_id: The memory that was accessed.
+            access_type: Type of access — 'recall', 'cited', 'acted_on'.
+        """
+        self._ensure_initialized()
+        self.storage.record_memory_access(memory_id, access_type)
+    
+    def decay_and_boost(self) -> Dict[str, Any]:
+        """Run the pattern learning cycle.
+        
+        Boosts importance of frequently accessed memories.
+        Decays importance of memories that are never accessed.
+        Should be called periodically (e.g., weekly maintenance).
+        
+        Returns:
+            Statistics about what changed.
+        """
+        self._ensure_initialized()
+        
+        all_memories = self.storage.list_memories(limit=5000)
+        boosted = 0
+        decayed = 0
+        unchanged = 0
+        
+        for memory in all_memories:
+            access_count = self.storage.get_access_count(memory.id)
+            age_days = self._memory_age_days(memory.created)
+            
+            old_importance = memory.importance
+            new_importance = old_importance
+            
+            # Boost: accessed memories get more important
+            if access_count > 0:
+                # Logarithmic boost — diminishing returns
+                import math
+                boost = min(0.2, 0.05 * math.log2(access_count + 1))
+                new_importance = min(1.0, old_importance + boost)
+            
+            # Decay: old, never-accessed memories lose importance
+            elif age_days > 14 and access_count == 0:
+                # Slow linear decay: -0.02 per week past 2 weeks
+                weeks_stale = max(0, (age_days - 14)) / 7
+                decay = min(0.3, 0.02 * weeks_stale)  # Cap at -0.3
+                new_importance = max(0.1, old_importance - decay)
+            
+            # Apply if changed
+            if abs(new_importance - old_importance) > 0.01:
+                self.storage.update_memory_importance(memory.id, round(new_importance, 3))
+                if new_importance > old_importance:
+                    boosted += 1
+                else:
+                    decayed += 1
+            else:
+                unchanged += 1
+        
+        return {
+            "total_processed": len(all_memories),
+            "boosted": boosted,
+            "decayed": decayed,
+            "unchanged": unchanged,
+        }
+    
+    # ── Lifecycle ────────────────────────────────────────────
     
     def close(self) -> None:
         """Clean up resources."""

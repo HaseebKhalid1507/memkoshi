@@ -117,3 +117,15 @@ class StorageBackend(ABC):
     def search_memories(self, query: str, limit: int = 100) -> List[Memory]:
         """Search memories with keyword matching."""
         pass
+    
+    def record_memory_access(self, memory_id: str, access_type: str = "recall") -> None:
+        """Record an access event for a memory."""
+        pass
+    
+    def get_access_count(self, memory_id: str) -> int:
+        """Get total access count for a memory."""
+        return 0
+    
+    def update_memory_importance(self, memory_id: str, new_importance: float) -> None:
+        """Update the importance score of a memory."""
+        pass

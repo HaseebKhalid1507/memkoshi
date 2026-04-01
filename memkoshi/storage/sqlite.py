@@ -109,12 +109,24 @@ class SQLiteBackend(StorageBackend):
         """)
         
         
+        # Create memory_access table for pattern learning
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memory_access (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                memory_id TEXT NOT NULL,
+                access_type TEXT NOT NULL,
+                accessed_at TEXT NOT NULL,
+                FOREIGN KEY (memory_id) REFERENCES memories(id)
+            )
+        """)
+        
         # Create indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_staged_status ON staged_memories(review_status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_id ON sessions(id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_memory ON memory_access(memory_id)")
 
         self.conn.commit()
     
@@ -795,3 +807,32 @@ class SQLiteBackend(StorageBackend):
         self.conn.commit()
         
         return rejected_count
+    
+    # ── Pattern Learning: Access Tracking ─────────────────────
+    
+    def record_memory_access(self, memory_id: str, access_type: str = "recall") -> None:
+        """Record an access event for a memory."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT INTO memory_access (memory_id, access_type, accessed_at) VALUES (?, ?, ?)",
+            (memory_id, access_type, datetime.now(timezone.utc).isoformat())
+        )
+        self.conn.commit()
+    
+    def get_access_count(self, memory_id: str) -> int:
+        """Get total access count for a memory."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM memory_access WHERE memory_id = ?", (memory_id,))
+        return cursor.fetchone()[0]
+    
+    def update_memory_importance(self, memory_id: str, new_importance: float) -> None:
+        """Update the importance score of a memory."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE memories SET importance = ?, updated = ? WHERE id = ?",
+            (new_importance, datetime.now(timezone.utc).isoformat(), memory_id)
+        )
+        self.conn.commit()
