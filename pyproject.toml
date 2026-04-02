@@ -1,6 +1,6 @@
 [project]
 name = "memkoshi"
-version = "0.1.0"
+version = "0.3.0"
 description = "The only agent memory system that learns and improves over time"
 authors = [{name = "Memkoshi Team", email = "hello@memkoshi.dev"}]
 license = {text = "MIT"}

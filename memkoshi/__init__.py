@@ -1,6 +1,6 @@
 """Memkoshi - The only agent memory system that learns and improves over time."""
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
 from .api import Memkoshi
 
