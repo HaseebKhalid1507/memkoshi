@@ -21,10 +21,10 @@ Local SQLite storage. No cloud dependencies. Memories survive forever.
 ```bash
 pip install git+https://github.com/HaseebKhalid1507/memkoshi.git
 memkoshi init
-echo "API key is sk-abc123 for the Claude project" | memkoshi commit
+echo "We chose PostgreSQL over MySQL for the new auth service" | memkoshi commit
 memkoshi review  # approve the extracted memory
-memkoshi recall "API key"
-# Returns: "API key is sk-abc123 for the Claude project"
+memkoshi recall "database decision"
+# Returns: "We chose PostgreSQL over MySQL for the new auth service"
 ```
 
 ## Cross-Agent Memory
@@ -163,7 +163,7 @@ score = mk.evolve.score({
     "errors": 1,
     "duration_minutes": 45
 })
-# Returns: {"score": 8.2, "insights": [...]}
+# Returns: {"score": 7.1, "task_completion_rate": 0.875, "errors": 1, ...}
 
 hints = mk.evolve.hints()
 # "High-scoring sessions actively use the memory system"
@@ -196,7 +196,12 @@ mk.init()
 mk.commit("Important decision text")        # Extract & stage
 mk.list_staged()                           # Review pending
 mk.approve(memory_id)                      # Move to permanent
+mk.reject(memory_id, reason="...")         # Reject staged memory
+mk.approve_all()                           # Approve all pending
 mk.recall("search query", limit=5)        # Four-layer search
+mk.ingest("/path/to/doc.md")              # Bulk import a document
+mk.boot_tiered(tier=0)                     # Tiered boot context
+mk.decay_and_boost()                       # Refresh memory importance
 
 # Context management  
 mk.context.set_handoff(task="...", progress="...")
@@ -269,7 +274,7 @@ memkoshi evolve status           # Performance dashboard
 | Feature | Memkoshi | Mem0 | Zep | Letta |
 |---------|----------|------|-----|-------|
 | **Staging workflow** | ✅ | ❌ | ❌ | ❌ |
-| **Local-first** | ✅ | ❌ | ❌* | ✅ |
+| **Local-first** | ✅ | ❌ | ❌ | ✅ |
 | **Multi-tier extraction** | ✅ | ❌ | ❌ | ❌ |
 | **No API keys required** | ✅ | ❌ | ❌ | ✅ |
 | **Four-layer search** | ✅ | ❌ | ❌ | ❌ |
@@ -279,11 +284,9 @@ memkoshi evolve status           # Performance dashboard
 | **MCP integration** | ✅ | ❌ | ❌ | ❌ |
 | **Cryptographic signing** | ✅ | ❌ | ❌ | ❌ |
 
-*Zep discontinued their open source version
-
 **Memkoshi**: Staging gates + Local-first + Pattern intelligence  
 **Mem0**: Cloud LLM extraction → direct storage  
-**Zep**: Enterprise cloud only ($80-150/month)  
+**Zep**: Enterprise cloud only, $80-150/month (open-source version discontinued)  
 **Letta**: Full agent framework (not modular)
 
 We're the only one with human-in-the-loop approval, local intelligence, and cross-session learning.
@@ -324,31 +327,15 @@ export ANTHROPIC_API_KEY=sk-...  # for api extractor
 export OPENAI_API_KEY=sk-...     # for api extractor
 ```
 
-## Testing
+## Development
 
-316 tests covering core functionality, integration scenarios, and edge cases.
+316 tests. All must pass before submitting PRs.
 
 ```bash
 git clone https://github.com/HaseebKhalid1507/memkoshi
 cd memkoshi
 pip install -e ".[dev]"
 pytest tests/  # 316 passed, 2 skipped
-```
-
-## Contributing
-
-We have strong opinions about code quality. Tests are required. Documentation is required. Breaking changes need compelling reasons.
-
-```bash
-# Development setup
-git clone https://github.com/HaseebKhalid1507/memkoshi
-cd memkoshi
-pip install -e ".[dev]"
-
-# Run tests
-pytest tests/
-
-# All tests must pass before submitting PRs
 ```
 
 ## License
