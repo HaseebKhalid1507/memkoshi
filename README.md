@@ -1,427 +1,362 @@
 # Memkoshi
 
-![Tests](https://img.shields.io/badge/tests-316_passing-green) ![PyPI](https://img.shields.io/badge/PyPI-v0.4.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-316_passing-green) ![Version](https://img.shields.io/badge/version-0.4.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
-**The only agent memory system that doesn't treat you like an idiot.**
+**AI agents have the memory of a goldfish. Every session starts from zero. Every decision gets re-made. Every lesson gets re-learned. Memkoshi fixes that.**
 
-Your AI agent has the memory of a goldfish. Every conversation starts from zero. Every decision gets re-made. Every lesson gets re-learned. That ends now.
+Production-grade memory library with staging gates, four-layer search, pattern detection, and evolution scoring. No vendor lock-in. No API requirements. Local-first with intelligent features that actually work.
 
-Memkoshi is a production-grade memory library with **three-tier extraction architecture**, **four-layer search engine**, **pattern detection**, **evolution scoring**, **context management**, **session lifecycle**, **search daemon**, and **cryptographic integrity**. Born from a real agent system that ran 100+ sessions. 53 production memories imported with 100% recall on test queries.
+## The Problem
 
-No vendor lock-in. No API requirements. No bullshit.
+Your AI assistant forgets everything the moment the conversation ends. Yesterday's debugging session, last week's architecture decisions, that API key you mentioned three times — gone. You're stuck in Groundhog Day with artificial intelligence.
 
-### 🔗 One Memory, Every Agent
+## The Solution
 
-Using Claude Code *and* Gemini CLI? Memkoshi is the shared memory layer between them. Both agents connect to the same `~/.memkoshi` store via MCP — Claude learns something in the morning, Gemini remembers it by afternoon. **Agent-agnostic memory that works across your entire toolkit.**
+Memkoshi is a memory system that thinks like you do. It extracts important information, stages it for review (the key differentiator), stores it with cryptographic integrity, and finds it instantly when you need it. Four-layer VelociRAG search combines vector similarity, keyword matching, knowledge graphs, and metadata filtering. Pattern detection learns from your behavior. Evolution scoring tracks if you're getting better.
 
-```
-Claude Code ──→ memkoshi ──→ ┌──────────────┐
-                              │  ~/.memkoshi  │  shared memory store
-Gemini CLI  ──→ memkoshi ──→ └──────────────┘
-```
+Local SQLite storage. No cloud dependencies. Memories survive forever.
+
+## 30-Second Demo
 
 ```bash
-# 30-second demo that actually works
-pip install memkoshi
+pip install git+https://github.com/HaseebKhalid1507/memkoshi.git
 memkoshi init
-echo "We decided to use Rust for the backend because Python was too slow" | memkoshi commit
+echo "API key is sk-abc123 for the Claude project" | memkoshi commit
 memkoshi review  # approve the extracted memory
-memkoshi recall "backend choice"
-# Returns: "We decided to use Rust for the backend..."
-
-# NEW in v0.4: Pattern detection & evolution tracking 🧠
-memkoshi patterns detect      # automatic behavioral patterns
-memkoshi evolve status        # performance dashboard
+memkoshi recall "API key"
+# Returns: "API key is sk-abc123 for the Claude project"
 ```
 
-## Architecture: Why This Doesn't Suck
+## Cross-Agent Memory
 
-```
-Text → Extractor (hybrid/pi/api) → Staged Memories → Review → Permanent Storage → Search (VelociRAG 4-layer)
-                                                               ↓
-                                                    Event Buffer → Pattern Detection → Evolution Scoring
-```
+Connect any MCP-compatible agent to the same memory store. Claude Code learns something in the morning, Gemini CLI remembers it by afternoon.
 
-### 🎛️ **Three-Tier Extraction Architecture**
-
-You choose your extraction quality vs. cost tradeoff:
-
-- **`HybridExtractor`** (default): Rule-based regex patterns. **Zero API costs.** Finds decisions, preferences, problems/solutions, and entities using pattern matching.
-- **`PiExtractor`**: OAuth-based LLM extraction via pi. No API keys needed, better extraction quality.
-- **`ApiExtractor`**: OpenAI/Anthropic API keys for maximum extraction sophistication.
-
-No other memory library gives you this flexibility. Start free, scale up when you need it.
-
-### 🔍 **Four-Layer VelociRAG Search**
-
-Not just "semantic search." The search engine combines:
-
-1. **Vector search** (FAISS, all-MiniLM-L6-v2 embeddings)
-2. **BM25 keyword search** (SQLite FTS5) 
-3. **Knowledge graph traversal** (entity extraction, relationship mapping)
-4. **Metadata filtering** (tags, categories, dates)
-
-Results fused with RRF + cross-encoder reranking. VelociRAG is installed automatically with Memkoshi.
-
-### 🧠 **Pattern Detection** (NEW in v0.4)
-
-**Nobody else has this.** Pure SQL pattern detection that finds behavioral insights:
-
-- **Frequency patterns** — memories accessed 3+ times (what's actually important)
-- **Knowledge gaps** — search queries that fail repeatedly (what you need to learn)  
-- **Temporal patterns** — day-of-week usage habits (when you work best)
-
-Zero ML dependencies. Pure regex + SQL analysis. Works offline. Learns from *your* behavior, not corporate training data.
-
-### 📈 **Evolution Scoring** (NEW in v0.4)
-
-**The only memory system that tracks if you're getting better.** Session scoring from 1.0-10.0 based on:
-
-- Task completion rates
-- Error counts  
-- Memory system usage
-- Duration efficiency
-
-Generates behavioral improvement hints from your high-performing sessions. **Concrete metrics, not fuzzy feelings.**
-
-### 🔒 **HMAC Cryptographic Signing**
-
-Every memory is signed with HMAC-SHA256. Tamper detection. Integrity verification. Because if you can't trust your memory system, you can't trust anything.
-
-### 🏗️ **Born From Production**
-
-This isn't a weekend project. Extracted from **Jawz**, a real AI agent system that processed 100+ actual conversation sessions. We know this works because it already worked.
-
-## Why This Exists
-
-Every other "AI memory" solution is either:
-- **Academic research** (unusable)
-- **SaaS vendor lock-in** (expensive, dies when the startup does)  
-- **Vector databases** (no extraction, just embedding storage)
-- **LLM-only extractors** (expensive, unreliable, need API keys)
-
-We built something different. Something that works locally, extracts intelligently at any budget, learns from your patterns, and lets you stay in control.
-
-## The Staging Workflow (The Killer Feature)
-
-```
-Conversation → Extract → Stage → Review → Memory → Search → Pattern Detection → Evolution Scoring
+```json
+// ~/.claude/settings.json or ~/.gemini/settings.json
+{
+  "mcpServers": {
+    "memkoshi": {
+      "command": "memkoshi",
+      "args": ["mcp-serve"]
+    }
+  }
+}
 ```
 
-Nobody else has the staging step. Everyone else trusts the AI extractor completely. We don't, because we're not idiots.
+Result: One memory system, every AI tool you use.
 
-```bash
-# Extract memories (creates staged entries)
-memkoshi commit "Meeting notes: decided on PostgreSQL, John prefers Docker"
+## Architecture 
 
-# Review what was extracted  
-memkoshi review
-# Memory 1: "Decision about PostgreSQL database choice" [A]pprove / [R]eject / [S]kip?
-
-# Search approved memories
-memkoshi recall "database decision"
-
-# NEW v0.4: Automatic pattern detection & evolution
-memkoshi patterns insights
-# 1. Most frequently accessed: PostgreSQL Decision (5 times)
-# 2. Found 2 recurring knowledge gaps - consider adding content for these topics
-
-memkoshi evolve hints
-# 1. High-scoring sessions have 85% task completion vs 67% average
-# 2. Best sessions actively use the memory system
+```
+Text → Extractor (hybrid/pi/api) → Staging → Review → Permanent → Four-Layer Search
+                                                         ↓
+                                              Event Buffer → Patterns → Evolution
 ```
 
-## Context & Handoff
+The staging gate is what makes Memkoshi different. Other systems auto-store everything the AI extracts, including hallucinations and noise. Memkoshi gives you a review step. Approve the good stuff, reject the garbage.
 
-Seamless state transfer between sessions. Set handoff for the next developer, get boot context within token budgets, checkpoint mid-session progress.
+## Core Features
+
+### Three-Tier Extraction
+
+Choose your quality vs. cost tradeoff:
+
+- **Hybrid** (default): Local regex patterns, zero API costs, 70% quality
+- **Pi**: OAuth-based LLM extraction, no API keys needed  
+- **Api**: Direct OpenAI/Anthropic API keys for maximum quality
+
+```python
+from memkoshi import Memkoshi
+
+# Start free, scale up when needed
+mk = Memkoshi("~/.memkoshi", extractor="hybrid")
+mk.init()
+mk.commit("Switched to PostgreSQL because MySQL was too slow")
+```
+
+### Staging Workflow
+
+The killer feature that nobody else has. Extracted memories go to staging first, not straight to permanent storage.
+
+```python
+# Extract memories
+result = mk.commit("Meeting notes: John prefers Docker, rejected Kubernetes")
+
+# Review what was extracted
+staged = mk.list_staged()
+for memory in staged:
+    print(f"Title: {memory['title']}")
+    print(f"Content: {memory['content']}")
+
+# Approve or reject
+mk.approve(memory['id'])  # or mk.reject(memory['id'])
+```
+
+### Four-Layer VelociRAG Search
+
+Not just semantic similarity. Real search that understands context.
+
+1. **Vector search**: FAISS embeddings (all-MiniLM-L6-v2)
+2. **Keyword search**: BM25 with SQLite FTS5
+3. **Knowledge graph**: Entity relationships and temporal connections  
+4. **Metadata filtering**: Categories, confidence, dates
+
+Results fused with reciprocal rank fusion and cross-encoder reranking.
+
+```python
+results = mk.recall("database decision", limit=5)
+for memory in results:
+    print(f"[{memory['confidence']}] {memory['title']}")
+    print(f"Score: {memory['score']:.2f} | Layers: {memory['source_layers']}")
+```
+
+### Context & Handoff
+
+Seamless state transfer between sessions. Boot context with token budgets, handoff for multi-session work.
 
 ```python
 # Set handoff for next session
-mk.context.set_handoff(task="Building auth API", progress="endpoints done", priority=4)
+mk.context.set_handoff(
+    task="Building auth API", 
+    progress="endpoints done", 
+    next_steps=["Add tests", "Deploy staging"]
+)
 
-# Get boot context (token-budgeted)
+# Get token-budgeted boot context
 boot = mk.context.get_boot(token_budget=4096)
-
-# Checkpoint mid-session
-mk.context.checkpoint(notes="Auth endpoints working, starting tests")
 ```
 
-## Session Lifecycle
+### Session Lifecycle
 
-Managed session contexts with automatic memory extraction. Perfect for agent loops and conversation boundaries.
+Automatic memory extraction with context managers. Perfect for agent loops.
 
 ```python
-mk = Memkoshi("~/.memkoshi", enable_auto_extract=True)
-mk.init()
-
 with mk.session("debugging login issue") as s:
     s.add_message("user", "Login timeout reproduced")
-    s.add_message("assistant", "Redis TTL was set to 0")
+    s.add_message("assistant", "Redis TTL was set to 0, fixed it")
     # Auto-extracts memories on exit
 ```
 
-## Search Daemon
+### Pattern Detection (NEW v0.4)
 
-Keeps VelociRAG warm in memory for instant search responses. Production-ready daemon with health monitoring.
+The only memory system that learns from your behavior. SQL-based pattern recognition with zero ML dependencies.
+
+- **Frequency patterns**: Memories accessed 3+ times
+- **Knowledge gaps**: Failed searches that repeat
+- **Temporal patterns**: Day-of-week usage habits
+
+```python
+patterns = mk.patterns.detect()
+insights = mk.patterns.insights()
+# "You search for authentication issues most on Mondays"
+# "Consider adding content about Redis TTL configuration"
+```
+
+### Evolution Scoring (NEW v0.4)
+
+Track if you're actually getting better. Session scoring based on task completion, error rates, and memory system usage.
+
+```python
+score = mk.evolve.score({
+    "tasks_completed": 7,
+    "tasks_attempted": 8, 
+    "errors": 1,
+    "duration_minutes": 45
+})
+# Returns: {"score": 8.2, "insights": [...]}
+
+hints = mk.evolve.hints()
+# "High-scoring sessions actively use the memory system"
+```
+
+### Search Daemon
+
+Optional daemon mode keeps VelociRAG warm in memory for sub-second search responses.
 
 ```bash
-memkoshi serve              # Start daemon (keeps search warm)
-memkoshi serve-status       # Check health
+memkoshi serve              # Start daemon
+memkoshi serve-status       # Check health  
+memkoshi serve-stop         # Stop daemon
 ```
+
+### HMAC Signing
+
+Every memory cryptographically signed with HMAC-SHA256. Tamper detection and integrity verification built-in.
 
 ## Python API
 
 ```python
 from memkoshi import Memkoshi
 
-# Initialize with your preferred extractor
-m = Memkoshi("~/.memkoshi", extractor="hybrid")  # or "pi" or "api"
-m.init()
+# Initialize 
+mk = Memkoshi("~/.memkoshi", extractor="hybrid")
+mk.init()
 
-# Process conversation
-m.commit("The client wants real-time updates, so we're switching to WebSockets")
+# Core operations
+mk.commit("Important decision text")        # Extract & stage
+mk.list_staged()                           # Review pending
+mk.approve(memory_id)                      # Move to permanent
+mk.recall("search query", limit=5)        # Four-layer search
 
-# Review staged memories
-staged = m.list_staged()
-for memory in staged:
-    print(f"{memory['title']}: {memory['content']}")
-    m.approve(memory['id'])  # or m.reject(memory['id'])
+# Context management  
+mk.context.set_handoff(task="...", progress="...")
+mk.context.get_boot(token_budget=4096)
 
-# Search memories (four-layer VelociRAG)
-results = m.recall("websockets", limit=5)
-for memory in results:
-    print(f"[{memory['confidence']}] {memory['title']}")
+# Session lifecycle
+with mk.session("task description") as s:
+    s.add_message("user", "message")
+    # Auto-extract on exit
 
-# NEW v0.4: Pattern detection (automatic)
-patterns = m.patterns.detect()
-insights = m.patterns.insights()
-
-# NEW v0.4: Evolution scoring
-score = m.evolve.score({"tasks_completed": 7, "tasks_attempted": 8, "errors": 1})
-hints = m.evolve.hints()
+# v0.4: Pattern detection & evolution
+mk.patterns.detect()                       # Find behavioral patterns
+mk.patterns.insights()                     # Human recommendations
+mk.evolve.score(session_data)              # Score session performance
+mk.evolve.hints()                          # Improvement suggestions
+mk.evolve.status()                         # Performance dashboard
 ```
 
-## MCP Server Integration
+## MCP Tools
 
-Memkoshi ships a full MCP server with **15 tools** (was 10, now 15 with v0.4). Any MCP-compatible agent gets persistent memory out of the box.
+15 tools available to any MCP-compatible agent:
 
-### Claude Code / pi
-
-Add to your `~/.claude/settings.json` or `.pi/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "memkoshi": {
-      "command": "memkoshi",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-That's it. Your agent now has access to:
-
-| Tool | What It Does |
+| Tool | Description |
 |------|-------------|
-| `memory_commit` | Extract memories from conversation text |
-| `memory_recall` | Search memories by meaning (4-layer VelociRAG) |
+| `memory_commit` | Extract and stage memories from text |
+| `memory_recall` | Four-layer search across all memories |
 | `memory_staged` | List memories pending review |
-| `memory_approve` | Approve a staged memory |
-| `memory_reject` | Reject a staged memory |
-| `memory_boot` | Get boot context (session count, handoff, recent sessions) |
+| `memory_approve` | Approve staged memory |
+| `memory_reject` | Reject staged memory |
+| `memory_boot` | System status and statistics |
 | `memory_stats` | Storage statistics |
-| `memory_handoff_get` | Get current handoff state |
+| `memory_handoff_get` | Current handoff state |
 | `memory_handoff_set` | Set handoff for next session |
-| `memory_context_boot` | Get token-budgeted boot context |
-| **NEW:** `memory_patterns` | **Detected behavioral patterns** |
-| **NEW:** `memory_insights` | **Recommendations from patterns** |
-| **NEW:** `memory_evolve_score` | **Score a session** |
-| **NEW:** `memory_evolve_hints` | **Behavioral improvement hints** |
-| **NEW:** `memory_evolve_status` | **Performance dashboard** |
-
-### Custom Storage Path
-
-```bash
-MEMKOSHI_STORAGE=~/my-agent/.memkoshi memkoshi serve
-```
-
-### LangChain / Custom Agents
-
-```python
-from memkoshi import Memkoshi
-
-# Drop this into any agent loop
-m = Memkoshi("~/.memkoshi")
-m.init()
-
-# After each conversation turn
-m.commit(conversation_text)
-
-# Before each response
-context = m.recall(user_query, limit=5)
-```
-
-No daemon. No background process. No config files beyond the MCP JSON. It just works.
-
-### Multi-Agent, One Memory
-
-The real power: point multiple agents at the same storage. Claude Code and Gemini CLI both get MCP config → both read and write the same memories → knowledge transfers automatically between tools.
-
-```bash
-# Same store, both agents
-# Claude Code:  ~/.claude/settings.json → memkoshi serve
-# Gemini CLI:   ~/.gemini/settings.json → memkoshi serve
-# Result: shared persistent memory across all your AI tools
-```
-
-## vs. The Competition
-
-| Feature | Memkoshi | Mem0 | Zep | Letta/MemGPT | LangChain Memory |
-|---------|----------|------|-----|-------------|------------------|
-| **Local-first** | ✅ | ❌ | ❌ | ✅ | ✅ |
-| **Staging workflow** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Multi-tier extraction** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **No API keys required** | ✅ | ❌ | ❌ | ✅ | ✅ |
-| **Structured extraction** | ✅ | ✅ | ❌ | ❌ | ❌ |
-| **Knowledge graph** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Pattern detection** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Evolution scoring** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Cryptographic signing** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Cross-session persistence** | ✅ | ✅ | ✅ | ✅ | ❌ |
-
-**Memkoshi**: Local extraction → staging workflow → cryptographically signed → four-layer search → pattern detection → evolution scoring  
-**Mem0**: Cloud LLM extraction → direct storage → vector search  
-**Zep**: Session summaries → cloud storage → basic search  
-**Letta**: Full agent framework (not modular memory), heavy dependencies  
-**LangChain**: Conversation buffer only, no extraction, no persistence
-
-We're the only one with local-first architecture, human-in-the-loop approval, multi-tier extraction, **pattern detection, and evolution scoring**.
-
-## Install & Quick Start
-
-```bash
-# Install
-pip install memkoshi
-
-# Initialize storage
-memkoshi init
-
-# Process a conversation
-echo "Important decision: switching to TypeScript for better type safety" | memkoshi commit
-
-# Review extracted memories
-memkoshi review
-
-# Search your memories  
-memkoshi recall "typescript decision"
-
-# NEW v0.4: Pattern detection & evolution
-memkoshi patterns detect      # find behavioral patterns
-memkoshi evolve status        # performance dashboard
-
-# Check system status
-memkoshi boot
-```
+| `memory_context_boot` | Token-budgeted boot context |
+| **NEW:** `memory_patterns` | Detected behavioral patterns |
+| **NEW:** `memory_insights` | Pattern-based recommendations |
+| **NEW:** `memory_evolve_score` | Score a session |
+| **NEW:** `memory_evolve_hints` | Improvement suggestions |
+| **NEW:** `memory_evolve_status` | Performance dashboard |
 
 ## CLI Commands
 
 ```bash
-memkoshi commit "text"        # Extract memories from text
-memkoshi review              # Interactive memory review
-memkoshi recall "query"      # Search memories (4-layer VelociRAG)
-memkoshi boot               # Show system status
-memkoshi stats              # Storage statistics
-memkoshi reindex            # Rebuild search index
-memkoshi serve              # Start search daemon
-memkoshi serve-status       # Check daemon health
-memkoshi serve-stop         # Stop daemon
-memkoshi mcp-serve          # Start MCP server
-memkoshi handoff set        # Set handoff state
-memkoshi handoff show       # Show current handoff
-memkoshi handoff clear      # Clear handoff
-memkoshi context boot       # Get boot context
+memkoshi commit "text"           # Extract memories
+memkoshi review                  # Interactive review
+memkoshi recall "query"          # Search memories
+memkoshi boot                    # System status
+memkoshi stats                   # Storage statistics
 
-# NEW v0.4: Pattern detection commands
-memkoshi patterns detect    # Detect behavioral patterns
-memkoshi patterns insights  # Human-readable recommendations  
-memkoshi patterns stats     # Usage statistics
+# Context management
+memkoshi handoff set "task"      # Set handoff state
+memkoshi handoff show            # Show current handoff
+memkoshi context boot            # Boot context
 
-# NEW v0.4: Evolution commands
-memkoshi evolve score       # Score a session
-memkoshi evolve hints       # Get improvement hints
-memkoshi evolve status      # Performance dashboard
+# Search daemon
+memkoshi serve                   # Start daemon
+memkoshi serve-status            # Check health
+memkoshi serve-stop              # Stop daemon
+
+# v0.4: Pattern detection & evolution
+memkoshi patterns detect         # Find patterns
+memkoshi patterns insights       # Get recommendations
+memkoshi evolve score "session"  # Score session
+memkoshi evolve hints            # Get improvement hints
+memkoshi evolve status           # Performance dashboard
 ```
 
-## API Reference
+## vs. The Competition
 
-### Core Memory Operations
+| Feature | Memkoshi | Mem0 | Zep | Letta |
+|---------|----------|------|-----|-------|
+| **Staging workflow** | ✅ | ❌ | ❌ | ❌ |
+| **Local-first** | ✅ | ❌ | ❌* | ✅ |
+| **Multi-tier extraction** | ✅ | ❌ | ❌ | ❌ |
+| **No API keys required** | ✅ | ❌ | ❌ | ✅ |
+| **Four-layer search** | ✅ | ❌ | ❌ | ❌ |
+| **Pattern detection** | ✅ | ❌ | ❌ | ❌ |
+| **Evolution scoring** | ✅ | ❌ | ❌ | ❌ |
+| **Session lifecycle** | ✅ | ❌ | ❌ | ❌ |
+| **MCP integration** | ✅ | ❌ | ❌ | ❌ |
+| **Cryptographic signing** | ✅ | ❌ | ❌ | ❌ |
 
-- `mk.commit(text)` → Extract and stage memories
-- `mk.recall(query, limit=10)` → List[Memory] (4-layer search)
-- `mk.list_staged()` → List[StagedMemory] 
-- `mk.approve(memory_id)` → bool
-- `mk.reject(memory_id)` → bool
+*Zep discontinued their open source version
 
-### Context & Handoff
+**Memkoshi**: Staging gates + Local-first + Pattern intelligence  
+**Mem0**: Cloud LLM extraction → direct storage  
+**Zep**: Enterprise cloud only ($80-150/month)  
+**Letta**: Full agent framework (not modular)
 
-- `mk.context.set_handoff(...)` → Set session handoff state
-- `mk.context.get_handoff()` → Dict (current handoff)
-- `mk.context.get_boot(token_budget)` → str (boot context)
+We're the only one with human-in-the-loop approval, local intelligence, and cross-session learning.
 
-### NEW v0.4: Pattern Detection
+## Installation
 
-- `mk.patterns.detect()` → List[Pattern]
-- `mk.patterns.insights()` → List[str]  
-- `mk.patterns.stats()` → Dict
+```bash
+# Install from GitHub (PyPI coming soon)
+pip install git+https://github.com/HaseebKhalid1507/memkoshi.git
 
-### NEW v0.4: Evolution Scoring
+# Quick start
+memkoshi init
+echo "Important information here" | memkoshi commit
+memkoshi review
+memkoshi recall "information"
 
-- `mk.evolve.score(input, session_id)` → Dict
-- `mk.evolve.hints()` → List[str]
-- `mk.evolve.status()` → Dict
+# With pattern detection & evolution
+memkoshi patterns detect
+memkoshi evolve status
+```
 
-## What v0.4 Actually Has
+## Configuration
 
-We don't lie about features. Here's what actually works today:
+```python
+# Storage location
+mk = Memkoshi("~/my-memories")
 
-- ✅ Three-tier extraction architecture (hybrid/pi/api)
-- ✅ Four-layer VelociRAG search engine with knowledge graph
-- ✅ Staging workflow with interactive review
-- ✅ Local SQLite storage with HMAC-SHA256 signing
-- ✅ CLI, Python API, and MCP server with 15 tools
-- ✅ Memory deduplication and confidence scoring
-- ✅ **NEW:** Pure SQL pattern detection (frequency, gaps, temporal)
-- ✅ **NEW:** Evolution scoring system with behavioral hints
-- ✅ **NEW:** Event buffer system for performance tracking
-- ✅ **316 tests**, all passing in under 3 seconds
-- ✅ Cross-encoder reranking and RRF fusion
-- ❌ Pattern learning from user feedback (v0.5)
-- ❌ Memory relationship graphs visualization (v0.5)
-- ❌ Bulk document import (v0.5)
+# Extraction quality
+mk = Memkoshi("~/.memkoshi", extractor="pi")        # OAuth LLM
+mk = Memkoshi("~/.memkoshi", extractor="api")       # API keys
 
-## Requirements
+# With auto-extraction
+mk = Memkoshi("~/.memkoshi", enable_auto_extract=True)
 
-- Python 3.8+
-- ~25MB storage per 1000 memories (increased for pattern/evolution data)
-- No internet required (except for optional pi/api extractors)
-- VelociRAG 4-layer search engine included
+# Environment variables
+export MEMKOSHI_STORAGE=~/my-memories
+export ANTHROPIC_API_KEY=sk-...  # for api extractor
+export OPENAI_API_KEY=sk-...     # for api extractor
+```
 
-## Contributing
+## Testing
+
+316 tests covering core functionality, integration scenarios, and edge cases.
 
 ```bash
 git clone https://github.com/HaseebKhalid1507/memkoshi
 cd memkoshi
 pip install -e ".[dev]"
-pytest tests/  # Should pass 316 tests in <3s
+pytest tests/  # 316 passed, 2 skipped
 ```
 
-We have opinions about code quality. Tests are required. Documentation is required. Breaking changes need good reasons.
+## Contributing
+
+We have strong opinions about code quality. Tests are required. Documentation is required. Breaking changes need compelling reasons.
+
+```bash
+# Development setup
+git clone https://github.com/HaseebKhalid1507/memkoshi
+cd memkoshi
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/
+
+# All tests must pass before submitting PRs
+```
 
 ## License
 
-MIT. Because lock-in is for losers.
+MIT. Because vendor lock-in is for losers.
 
 ---
 
-**Built by agents, for agents. Memory is the foundation of intelligence. Evolution is the foundation of improvement.**
+**Built by agents, for agents.** Memory is the foundation of intelligence. Evolution is the foundation of improvement. 
+
+Memkoshi gives your AI the one thing it's missing: the ability to remember, learn, and get better over time.
