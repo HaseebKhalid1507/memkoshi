@@ -1,12 +1,12 @@
 # Memkoshi
 
-![Tests](https://img.shields.io/badge/tests-142_passing-green) ![PyPI](https://img.shields.io/badge/PyPI-v0.1.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-239_passing-green) ![PyPI](https://img.shields.io/badge/PyPI-v0.3.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **The only agent memory system that doesn't treat you like an idiot.**
 
 Your AI agent has the memory of a goldfish. Every conversation starts from zero. Every decision gets re-made. Every lesson gets re-learned. That ends now.
 
-Memkoshi is a production-grade memory library with **three-tier extraction architecture**, **four-layer search engine**, and **cryptographic integrity**. Born from a real agent system that ran 100+ sessions. 53 production memories imported with 100% recall on test queries.
+Memkoshi is a production-grade memory library with **three-tier extraction architecture**, **four-layer search engine**, **context management**, **session lifecycle**, **search daemon**, and **cryptographic integrity**. Born from a real agent system that ran 100+ sessions. 53 production memories imported with 100% recall on test queries.
 
 No vendor lock-in. No API requirements. No bullshit.
 
@@ -95,6 +95,44 @@ memkoshi review
 memkoshi recall "database decision"
 ```
 
+## Context & Handoff
+
+Seamless state transfer between sessions. Set handoff for the next developer, get boot context within token budgets, checkpoint mid-session progress.
+
+```python
+# Set handoff for next session
+mk.context.set_handoff(task="Building auth API", progress="endpoints done", priority=4)
+
+# Get boot context (token-budgeted)
+boot = mk.context.get_boot(token_budget=4096)
+
+# Checkpoint mid-session
+mk.context.checkpoint(notes="Auth endpoints working, starting tests")
+```
+
+## Session Lifecycle
+
+Managed session contexts with automatic memory extraction. Perfect for agent loops and conversation boundaries.
+
+```python
+mk = Memkoshi("~/.memkoshi", enable_auto_extract=True)
+mk.init()
+
+with mk.session("debugging login issue") as s:
+    s.add_message("user", "Login timeout reproduced")
+    s.add_message("assistant", "Redis TTL was set to 0")
+    # Auto-extracts memories on exit
+```
+
+## Search Daemon
+
+Keeps VelociRAG warm in memory for instant search responses. Production-ready daemon with health monitoring.
+
+```bash
+memkoshi serve              # Start daemon (keeps search warm)
+memkoshi serve-status       # Check health
+```
+
 ## Python API
 
 ```python
@@ -121,7 +159,7 @@ for memory in results:
 
 ## MCP Server Integration
 
-Memkoshi ships a full MCP server with 7 tools. Any MCP-compatible agent gets persistent memory out of the box.
+Memkoshi ships a full MCP server with 10 tools. Any MCP-compatible agent gets persistent memory out of the box.
 
 ### Claude Code / pi
 
@@ -149,6 +187,9 @@ That's it. Your agent now has access to:
 | `memory_reject` | Reject a staged memory |
 | `memory_boot` | Get boot context (session count, handoff, recent sessions) |
 | `memory_stats` | Storage statistics |
+| `memory_handoff_get` | Get current handoff state |
+| `memory_handoff_set` | Set handoff for next session |
+| `memory_context_boot` | Get token-budgeted boot context |
 
 ### Custom Storage Path
 
@@ -237,11 +278,17 @@ memkoshi recall "query"      # Search memories (4-layer VelociRAG)
 memkoshi boot               # Show system status
 memkoshi stats              # Storage statistics
 memkoshi reindex            # Rebuild search index
-memkoshi serve              # Start MCP server
-memkoshi config             # Configure extractors
+memkoshi serve              # Start search daemon
+memkoshi serve-status       # Check daemon health
+memkoshi serve-stop         # Stop daemon
+memkoshi mcp-serve          # Start MCP server
+memkoshi handoff set        # Set handoff state
+memkoshi handoff show       # Show current handoff
+memkoshi handoff clear      # Clear handoff
+memkoshi context boot       # Get boot context
 ```
 
-## What v0.1 Actually Has
+## What v0.3 Actually Has
 
 We don't lie about features. Here's what actually works today:
 
@@ -251,7 +298,7 @@ We don't lie about features. Here's what actually works today:
 - ✅ Local SQLite storage with HMAC-SHA256 signing
 - ✅ CLI, Python API, and MCP server
 - ✅ Memory deduplication and confidence scoring
-- ✅ **142 tests**, all passing in 0.30 seconds
+- ✅ **239 tests**, all passing in 0.30 seconds
 - ✅ Cross-encoder reranking and RRF fusion
 - ❌ Pattern learning from user feedback (v0.2)
 - ❌ Memory relationship graphs visualization (v0.2)
