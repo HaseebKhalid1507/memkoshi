@@ -55,7 +55,7 @@ Not just "semantic search." The search engine combines:
 3. **Knowledge graph traversal** (entity extraction, relationship mapping)
 4. **Metadata filtering** (tags, categories, dates)
 
-Results fused with RRF + cross-encoder reranking. Falls back to pure SQL when VelociRAG isn't installed.
+Results fused with RRF + cross-encoder reranking. VelociRAG is installed automatically with Memkoshi.
 
 ### 🔒 **HMAC Cryptographic Signing**
 
@@ -308,8 +308,8 @@ We don't lie about features. Here's what actually works today:
 
 - Python 3.8+
 - ~20MB storage per 1000 memories
-- No internet required (except for optional pi/api extractors and VelociRAG features)
-- Optional: VelociRAG for enhanced search capabilities
+- No internet required (except for optional pi/api extractors)
+- VelociRAG 4-layer search engine included
 
 ## Contributing
 
