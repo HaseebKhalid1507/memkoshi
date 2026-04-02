@@ -1,6 +1,6 @@
 # Memkoshi
 
-![Tests](https://img.shields.io/badge/tests-321_passing-green) ![PyPI](https://img.shields.io/badge/PyPI-v0.4.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-316_passing-green) ![PyPI](https://img.shields.io/badge/PyPI-v0.4.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **The only agent memory system that doesn't treat you like an idiot.**
 
@@ -394,7 +394,7 @@ We don't lie about features. Here's what actually works today:
 - ✅ **NEW:** Pure SQL pattern detection (frequency, gaps, temporal)
 - ✅ **NEW:** Evolution scoring system with behavioral hints
 - ✅ **NEW:** Event buffer system for performance tracking
-- ✅ **321 tests**, all passing in 0.35 seconds
+- ✅ **316 tests**, all passing in under 3 seconds
 - ✅ Cross-encoder reranking and RRF fusion
 - ❌ Pattern learning from user feedback (v0.5)
 - ❌ Memory relationship graphs visualization (v0.5)
@@ -413,7 +413,7 @@ We don't lie about features. Here's what actually works today:
 git clone https://github.com/HaseebKhalid1507/memkoshi
 cd memkoshi
 pip install -e ".[dev]"
-pytest tests/  # Should pass 321 tests in <2s
+pytest tests/  # Should pass 316 tests in <3s
 ```
 
 We have opinions about code quality. Tests are required. Documentation is required. Breaking changes need good reasons.
