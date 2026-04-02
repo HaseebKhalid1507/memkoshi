@@ -2,6 +2,7 @@
 
 import os
 import logging
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional, Any
@@ -70,7 +71,7 @@ class SimpleSearch:
 class MemkoshiSearch:
     """Full 4-layer search: vector + keyword + graph + metadata via VelociRAG."""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, enable_daemon: bool = True):
         self.db_path = db_path
         self._index_path = os.path.join(db_path, "search")
         self._store = None
@@ -81,6 +82,8 @@ class MemkoshiSearch:
         self._unified = None
         self._fallback = None
         self._use_fallback = not HAS_VELOCIRAG
+        self._enable_daemon = enable_daemon
+        self._daemon_client = None
 
     def initialize(self):
         if self._use_fallback:
@@ -88,7 +91,24 @@ class MemkoshiSearch:
             self._fallback = SimpleSearch(self.db_path)
             self._fallback.initialize()
             return
+        
+        # Initialize daemon client if enabled
+        if self._enable_daemon and HAS_VELOCIRAG:
+            try:
+                from ..daemon.client import DaemonClient
+                self._daemon_client = DaemonClient(self.db_path, auto_start=False)
+                logger.debug("Daemon client initialized")
+            except ImportError:
+                logger.debug("Daemon client not available, using direct search")
 
+        # Initialize direct search components (lazy init for daemon support)
+        self._init_direct_search_components()
+    
+    def _init_direct_search_components(self):
+        """Initialize search components for direct search fallback."""
+        if self._unified:  # Already initialized
+            return
+        
         os.makedirs(self._index_path, exist_ok=True)
 
         # Layer 1: Vector store (FAISS + SQLite)
@@ -125,6 +145,9 @@ class MemkoshiSearch:
         """Index a memory across all 4 layers."""
         if self._use_fallback:
             return
+        
+        # Ensure components are initialized
+        self._init_direct_search_components()
 
         text = f"{memory.title}\n\n{memory.content}"
         embedding = self._embedder.embed(text)
@@ -213,7 +236,36 @@ class MemkoshiSearch:
         """4-layer fusion search: vector + keyword + graph + metadata → RRF → results."""
         if self._use_fallback:
             return self._fallback.search(query, limit, category, recency_bias)
+        
+        # Try daemon first if available
+        if self._daemon_client:
+            try:
+                return self._daemon_search(query, limit, category, recency_bias)
+            except (ConnectionError, FileNotFoundError, socket.timeout, RuntimeError) as e:
+                logger.debug(f"Daemon search failed ({e}), falling back to direct search")
+                # Fall through to direct search
+        
+        # Direct search (existing implementation)        
+        return self._direct_search(query, limit, category, recency_bias)
+    
+    def _daemon_search(self, query: str, limit: int = 5, category: str = None,
+                      recency_bias: bool = True) -> List[Dict[str, Any]]:
+        """Search via daemon (fast path)."""
+        return self._daemon_client.search(
+            query=query,
+            limit=limit, 
+            category=category,
+            recency_bias=recency_bias
+        )
+    
+    def _direct_search(self, query: str, limit: int = 5, category: str = None,
+                      recency_bias: bool = True) -> List[Dict[str, Any]]:
+        """Direct search implementation (existing code)."""
 
+        # Ensure components are initialized for direct search
+        if not self._unified:
+            self._init_direct_search_components()
+        
         # Build metadata filters
         filters = {}
         if category:
@@ -270,6 +322,8 @@ class MemkoshiSearch:
                     pass
 
         return final_results
+    
+
 
     def get_most_accessed(self, limit: int = 10) -> List[Dict]:
         """Get most frequently accessed memories."""

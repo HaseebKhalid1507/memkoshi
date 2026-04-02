@@ -120,6 +120,38 @@ class SQLiteBackend(StorageBackend):
             )
         """)
         
+        # Create context management tables
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS context_data (
+                layer TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                value_type TEXT DEFAULT 'string',
+                importance REAL DEFAULT 0.5,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (layer, key)
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                summary TEXT NOT NULL,
+                extracted_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS checkpoints (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                notes TEXT DEFAULT '',
+                session_state TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         # Create indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created)")
@@ -127,6 +159,9 @@ class SQLiteBackend(StorageBackend):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_staged_status ON staged_memories(review_status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_id ON sessions(id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_access_memory ON memory_access(memory_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_context_archive_time ON context_data(created_at) WHERE layer = 'archive'")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_session_log_created ON session_log(created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_checkpoints_created ON checkpoints(created_at)")
 
         self.conn.commit()
     
@@ -655,9 +690,12 @@ class SQLiteBackend(StorageBackend):
         cursor.execute("SELECT COUNT(*) FROM staged_memories WHERE review_status = 'pending'")
         stats["staged_count"] = cursor.fetchone()[0]
         
-        # Count sessions
+        # Count sessions from both tables for backward compatibility
         cursor.execute("SELECT COUNT(*) FROM sessions")
-        stats["sessions_count"] = cursor.fetchone()[0]
+        old_sessions = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM session_log")
+        new_sessions = cursor.fetchone()[0]
+        stats["sessions_count"] = old_sessions + new_sessions
         
         # Database size
         cursor.execute("PRAGMA page_count")
@@ -836,3 +874,145 @@ class SQLiteBackend(StorageBackend):
             (new_importance, datetime.now(timezone.utc).isoformat(), memory_id)
         )
         self.conn.commit()
+    
+    # ── Context Management Methods ─────────────────────
+    
+    def set_context_data(self, layer: str, key: str, value: str, value_type: str = 'string') -> None:
+        """Set context data in a layer."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO context_data 
+            (layer, key, value, value_type, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (layer, key, value, value_type, datetime.now(timezone.utc).isoformat()))
+        
+        self.conn.commit()
+    
+    def get_context_data(self, layer: str, key: str) -> Optional[tuple]:
+        """Get context data from a layer. Returns (value, value_type) or None."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute(
+            "SELECT value, value_type FROM context_data WHERE layer = ? AND key = ?",
+            (layer, key)
+        )
+        
+        result = cursor.fetchone()
+        return result if result else None
+    
+    def delete_context_data(self, layer: str, key: str) -> bool:
+        """Delete context data from a layer. Returns True if deleted."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute(
+            "DELETE FROM context_data WHERE layer = ? AND key = ?",
+            (layer, key)
+        )
+        
+        rows_affected = cursor.rowcount
+        self.conn.commit()
+        
+        return rows_affected > 0
+    
+    def get_layer_data(self, layer: str) -> Dict[str, Any]:
+        """Get all context data for a layer."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute(
+            "SELECT key, value, value_type FROM context_data WHERE layer = ?",
+            (layer,)
+        )
+        
+        result = {}
+        for row in cursor.fetchall():
+            key, value, value_type = row
+            if value_type in ['dict', 'list', 'int', 'float', 'bool']:
+                try:
+                    result[key] = json.loads(value)
+                except json.JSONDecodeError:
+                    result[key] = value
+            else:
+                result[key] = value
+        
+        return result
+    
+    def save_checkpoint(self, notes: str, session_state: str) -> int:
+        """Save a checkpoint. Returns checkpoint ID."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO checkpoints (notes, session_state) 
+            VALUES (?, ?)
+        """, (notes, session_state))
+        
+        checkpoint_id = cursor.lastrowid
+        self.conn.commit()
+        
+        return checkpoint_id
+    
+    def get_latest_checkpoint(self) -> Optional[Dict[str, Any]]:
+        """Get the most recent checkpoint."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, notes, session_state, created_at 
+            FROM checkpoints 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        
+        result = cursor.fetchone()
+        if not result:
+            return None
+        
+        checkpoint_id, notes, session_state, created_at = result
+        
+        return {
+            "id": checkpoint_id,
+            "notes": notes,
+            "session_state": json.loads(session_state) if session_state else {},
+            "created_at": created_at
+        }
+    
+    def add_session_log(self, summary: str, extracted_count: int = 0) -> None:
+        """Add a session to the session log."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO session_log (summary, extracted_count) 
+            VALUES (?, ?)
+        """, (summary, extracted_count))
+        
+        self.conn.commit()
+    
+    def get_recent_sessions(self, n: int = 3) -> List[Dict[str, Any]]:
+        """Get the N most recent sessions."""
+        self._check_conn()
+        cursor = self.conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, summary, extracted_count, created_at 
+            FROM session_log 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        """, (n,))
+        
+        results = []
+        for row in cursor.fetchall():
+            session_id, summary, extracted_count, created_at = row
+            results.append({
+                "session_id": session_id,
+                "summary": summary,
+                "extracted_count": extracted_count,
+                "timestamp": created_at
+            })
+        
+        return results

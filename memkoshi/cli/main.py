@@ -1,6 +1,7 @@
 """Main CLI interface."""
 
 import click
+import os
 import sys
 import json
 from pathlib import Path
@@ -10,6 +11,7 @@ from ..extractors.hybrid import HybridExtractor
 from ..core.pipeline import MemoryPipeline
 from ..core.session import SessionSummary
 from ..core.context import BootContext
+from ..core.context_manager import ContextManager
 from ..search.engine import MemkoshiSearch
 
 
@@ -334,8 +336,110 @@ def reindex(ctx):
 
 
 @cli.command()
+@click.option('--storage-path', default='~/.memkoshi', help='Storage directory')
+@click.option('--socket-path', help='Unix socket path (auto-generated if not specified)')
+@click.option('--max-memory', default=1024, help='Maximum memory usage in MB')
+@click.option('--daemon', is_flag=True, help='Run as background daemon')
+@click.option('--log-level', default='INFO', help='Logging level')
+def serve(storage_path, socket_path, max_memory, daemon, log_level):
+    """Start search daemon to keep VelociRAG warm in memory."""
+    import logging
+    import os
+    
+    storage_path = Path(storage_path).expanduser()
+    if not storage_path.exists():
+        click.echo(f"Error: Storage path does not exist: {storage_path}")
+        sys.exit(1)
+    
+    if not socket_path:
+        socket_path = f"/tmp/memkoshi-search-{os.getuid()}.sock"
+    
+    # Configure logging
+    logging.basicConfig(level=getattr(logging, log_level.upper()))
+    
+    from ..daemon.server import MemkoshiDaemon
+    
+    # Start daemon
+    daemon_instance = MemkoshiDaemon(
+        storage_path=str(storage_path),
+        socket_path=socket_path,
+        max_memory_mb=max_memory
+    )
+    
+    if daemon:
+        # TODO: Add daemonization
+        pass
+    
+    try:
+        daemon_instance.start()
+    except KeyboardInterrupt:
+        click.echo("\nShutting down daemon...")
+
+
+@cli.command("serve-stop")
+def serve_stop():
+    """Stop running search daemon."""
+    import os
+    import socket
+    from ..daemon.protocol import send_message, recv_message
+    
+    socket_path = f"/tmp/memkoshi-search-{os.getuid()}.sock"
+    
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(socket_path)
+        
+        send_message(sock, {"cmd": "shutdown"})
+        response = recv_message(sock)
+        sock.close()
+        
+        if response["status"] == "success":
+            click.echo("✓ Daemon stopped")
+        else:
+            click.echo(f"Error: {response['error']}")
+            sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: Could not connect to daemon: {e}")
+        sys.exit(1)
+
+
+@cli.command("serve-status")
+def serve_status():
+    """Show search daemon status."""
+    import os
+    import socket
+    from ..daemon.protocol import send_message, recv_message
+    
+    socket_path = f"/tmp/memkoshi-search-{os.getuid()}.sock"
+    
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(socket_path)
+        
+        send_message(sock, {"cmd": "health"})
+        response = recv_message(sock)
+        sock.close()
+        
+        if response["status"] == "success":
+            health = response["data"]
+            click.echo("=== Search Daemon Status ===")
+            click.echo(f"Status: ✓ Running")
+            click.echo(f"Version: {health['daemon_version']}")
+            click.echo(f"Uptime: {health['uptime_seconds']}s")
+            click.echo(f"Memory: {health['memory_usage_mb']}MB")
+            click.echo(f"Requests: {health['request_stats']['total_requests']}")
+            click.echo(f"Avg response: {health['request_stats']['avg_response_ms']}ms")
+        else:
+            click.echo(f"Error: {response['error']}")
+            sys.exit(1)
+    except Exception:
+        click.echo("=== Search Daemon Status ===")
+        click.echo("Status: ❌ Not running")
+
+
+@cli.command()
 @click.option('--storage', '-s', help='Storage path (default: from env or ~/.memkoshi)')
-def serve(storage):
+def mcp_serve(storage):
     """Start the MCP server for external tool access."""
     if storage:
         os.environ['MEMKOSHI_STORAGE'] = storage
@@ -346,23 +450,115 @@ def serve(storage):
         raise click.ClickException("Failed to start MCP server")
 
 
-@cli.command()
-@click.argument("text")
+@cli.group()
+def handoff():
+    """Manage handoff state between sessions."""
+    pass
+
+
+@handoff.command("set")
+@click.argument("task")
+@click.option("--progress", "-p", default="", help="Current progress")
+@click.option("--next", "-n", multiple=True, help="Next steps (can be repeated)")
+@click.option("--priority", "-P", default=3, type=int, help="Priority level (1=high, 5=low)")
 @click.pass_context
-def handoff(ctx, text):
-    """Save handoff state for next boot."""
+def handoff_set(ctx, task, progress, next, priority):
+    """Set handoff state for next session."""
     storage = ctx.obj['storage']
     storage.initialize()
     
-    # Get current context or create new
-    context = storage.get_context()
-    if not context:
-        context = BootContext()
+    context_manager = ContextManager(storage)
+    context_manager.set_handoff(
+        task=task,
+        progress=progress,
+        next_steps=list(next),
+        priority=priority
+    )
     
-    # Update handoff text
-    context.handoff = text
+    click.echo(f"✓ Handoff set: {task}")
+    if progress:
+        click.echo(f"  Progress: {progress}")
+    if next:
+        click.echo(f"  Next steps: {', '.join(next)}")
+
+
+@handoff.command("show")
+@click.pass_context
+def handoff_show(ctx):
+    """Show current handoff state."""
+    storage = ctx.obj['storage']
+    storage.initialize()
     
-    # Save context
-    storage.store_context(context)
+    context_manager = ContextManager(storage)
+    handoff = context_manager.get_handoff()
     
-    click.echo(f"Handoff saved: {text}")
+    if handoff:
+        click.echo(f"Task: {handoff['task']}")
+        click.echo(f"Priority: {handoff['priority']}")
+        if handoff['progress']:
+            click.echo(f"Progress: {handoff['progress']}")
+        if handoff['next_steps']:
+            click.echo(f"Next steps:")
+            for step in handoff['next_steps']:
+                click.echo(f"  • {step}")
+        click.echo(f"Created: {handoff['created_at']}")
+    else:
+        click.echo("No handoff state set.")
+
+
+@handoff.command("clear")
+@click.pass_context
+def handoff_clear(ctx):
+    """Clear current handoff state."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    context_manager = ContextManager(storage)
+    cleared = context_manager.clear_handoff()
+    
+    if cleared:
+        click.echo("✓ Handoff cleared.")
+    else:
+        click.echo("No handoff to clear.")
+
+
+@cli.group()
+def context():
+    """Manage context data and sessions."""
+    pass
+
+
+@context.command("boot")
+@click.option("--budget", "-b", default=4096, type=int, help="Token budget")
+@click.option("--json", "output_json", is_flag=True, help="Output JSON format")
+@click.pass_context
+def context_boot(ctx, budget, output_json):
+    """Show boot context with token budget."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    context_manager = ContextManager(storage)
+    boot_context = context_manager.get_boot(token_budget=budget)
+    
+    if output_json:
+        click.echo(json.dumps(boot_context, indent=2))
+    else:
+        click.echo(f"=== Boot Context (Budget: {budget} tokens) ===")
+        click.echo(f"Token estimate: {boot_context.get('token_count_estimate', 0)}")
+        
+        if boot_context.get('handoff'):
+            h = boot_context['handoff']
+            click.echo(f"\n🔄 Handoff: {h['task']}")
+            if h.get('progress'):
+                click.echo(f"   Progress: {h['progress']}")
+        
+        if boot_context.get('recent_sessions'):
+            click.echo(f"\n📝 Recent Sessions:")
+            for session in boot_context['recent_sessions']:
+                click.echo(f"  • {session.get('summary', '')[:80]}...")
+        
+        stats = boot_context.get('memory_stats', {})
+        if stats:
+            click.echo(f"\n📊 Memory Stats:")
+            click.echo(f"  Total: {stats.get('total_memories', 0)}")
+            click.echo(f"  Staged: {stats.get('staged_memories', 0)}")

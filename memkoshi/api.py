@@ -1,12 +1,14 @@
 """Main Memkoshi API for programmatic access."""
 
 import re
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 from .storage.sqlite import SQLiteBackend
 from .core.pipeline import MemoryPipeline
 from .core.context import BootContext
+from .core.context_manager import ContextManager
 from .extractors.hybrid import HybridExtractor
 from .search.engine import MemkoshiSearch
 
@@ -15,7 +17,8 @@ class Memkoshi:
     """Main API class for Memkoshi memory system."""
     
     def __init__(self, storage_path: str, extractor: str = "hybrid",
-                 provider: str = "anthropic", model: str = None, api_key: str = None):
+                 provider: str = "anthropic", model: str = None, api_key: str = None,
+                 enable_auto_extract: bool = False):
         """Initialize Memkoshi with a storage path.
         
         Args:
@@ -24,6 +27,7 @@ class Memkoshi:
             provider: API provider — "anthropic" or "openai" (only used if extractor="api").
             model: Model override (default: claude-sonnet-4-20250514 / gpt-4o-mini).
             api_key: API key override (default: reads from env var).
+            enable_auto_extract: If True, auto-extract memories on session end.
         """
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
@@ -31,11 +35,17 @@ class Memkoshi:
         self._provider = provider
         self._model = model
         self._api_key = api_key
+        self.enable_auto_extract = enable_auto_extract
+        
+        # Session management
+        self._callbacks = []  # List of (event, callback) tuples
+        self._active_session = None
         
         # Components will be initialized on init()
         self.storage = None
         self.pipeline = None
         self.search = None
+        self._context_manager = None
         self._initialized = False
     
     def init(self) -> None:
@@ -66,10 +76,18 @@ class Memkoshi:
         self.pipeline = MemoryPipeline(self.storage, extractor)
         
         # Initialize search engine - pass the db file path, not directory
-        self.search = MemkoshiSearch(str(self.storage_path))
+        self.search = MemkoshiSearch(str(self.storage_path), enable_daemon=True)
         self.search.initialize()
         
         self._initialized = True
+    
+    @property
+    def context(self) -> ContextManager:
+        """Access to unified context management."""
+        if self._context_manager is None:
+            self._ensure_initialized()
+            self._context_manager = ContextManager(self.storage)
+        return self._context_manager
     
     def boot(self) -> Dict[str, Any]:
         """Get boot context with current state.
@@ -79,30 +97,22 @@ class Memkoshi:
         """
         self._ensure_initialized()
         
-        # Get context from storage
-        context = self.storage.get_context()
+        # Use new context system but maintain backward compatibility
+        boot_context = self.context.get_boot()
         
-        # Get memory statistics
+        # Get total session count from storage (not just recent)
         stats = self.stats()
         
-        # Extract session count from recent sessions
-        session_count = 0
-        recent_sessions = []
-        
-        if context and context.recent_sessions:
-            session_count = len(context.recent_sessions)
-            recent_sessions = context.recent_sessions
-        
-        # Build boot context
-        boot_ctx = {
-            "session_count": session_count,
-            "memory_count": stats["total_memories"],
-            "staged_count": stats["staged_memories"],
-            "recent_sessions": recent_sessions,
-            "handoff_text": context.handoff if context else None
+        # Map new format to legacy format for backward compatibility
+        legacy_format = {
+            "session_count": stats.get("session_count", 0),
+            "memory_count": boot_context.get("memory_stats", {}).get("total_memories", 0),
+            "staged_count": boot_context.get("memory_stats", {}).get("staged_memories", 0),
+            "recent_sessions": [s.get("summary", "") for s in boot_context.get("recent_sessions", [])],
+            "handoff_text": boot_context.get("handoff", {}).get("task") if boot_context.get("handoff") else None
         }
         
-        return boot_ctx
+        return legacy_format
     
     def recall(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Search for memories.
@@ -181,21 +191,9 @@ class Memkoshi:
         # Process through pipeline
         result = self.pipeline.process(text)
         
-        # Always update context to track all sessions
-        context = self.storage.get_context()
-        if not context:
-            context = BootContext()
-        
-        # Add session summary regardless of whether memories were extracted
+        # Track session using new context system
         session_summary = f"{text[:100]}... ({result['staged_count']} memories)"
-        context.recent_sessions.append(session_summary)
-        context.recent_sessions = context.recent_sessions[-3:]  # Keep last 3
-        
-        # Update staged memories count
-        context.staged_memories_count = self.storage.get_stats().get('staged_count', 0)
-        
-        # Save updated context
-        self.storage.store_context(context)
+        self.context.add_session(session_summary, extracted_count=result['extracted_count'])
         
         return result
     
@@ -314,6 +312,68 @@ class Memkoshi:
             "never_accessed_count": never_accessed_count,
         }
     
+    # ── Session Lifecycle Management ───────────────────────────────
+    
+    def session(self, description: str = '') -> 'SessionContext':
+        """Create a session context manager.
+        
+        Args:
+            description: Optional description for this session
+            
+        Returns:
+            SessionContext that auto-extracts memories on exit
+        """
+        from .core.session import SessionContext
+        if self._active_session is not None:
+            raise RuntimeError("Session already active")
+        
+        session = SessionContext(self, description, self.enable_auto_extract)
+        self._active_session = session
+        return session
+    
+    def on(self, event: str, callback) -> None:
+        """Register a callback for an event.
+        
+        Args:
+            event: 'session_start', 'session_end', or 'checkpoint'
+            callback: Function taking (event, session_data) -> None
+        """
+        if event not in ['session_start', 'session_end', 'checkpoint']:
+            raise ValueError(f"Unknown event: {event}")
+        self._callbacks.append((event, callback))
+    
+    def checkpoint(self) -> Dict[str, Any]:
+        """Create a checkpoint and trigger callbacks.
+        
+        Returns:
+            Checkpoint metadata
+        """
+        if not self._active_session:
+            # Use context manager if available
+            if self._initialized and self._context_manager is not None:
+                return self.context.checkpoint()
+            else:
+                raise RuntimeError("No active session or context manager")
+        
+        # Trigger checkpoint callbacks with current session data
+        self._trigger_event('checkpoint', self._active_session._get_data())
+        
+        return {
+            'id': f"checkpoint_{int(__import__('time').time())}",
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'session_id': self._active_session.session_id
+        }
+    
+    def _trigger_event(self, event: str, session_data: Dict[str, Any]) -> None:
+        """Trigger all callbacks for an event."""
+        for event_name, callback in self._callbacks:
+            if event_name == event:
+                try:
+                    callback(event, session_data)
+                except Exception as e:
+                    # Log error but don't fail the session
+                    print(f"Callback error: {e}")
+
     # ── Feature: Bulk Document Import ──────────────────────────────────
     
     def ingest(self, source: str, chunk_size: int = 2000, overlap: int = 200,
@@ -569,6 +629,61 @@ class Memkoshi:
             "decayed": decayed,
             "unchanged": unchanged,
         }
+    
+    # ── Daemon Control ────────────────────────────────────────
+    
+    def start_daemon(self) -> bool:
+        """Start search daemon explicitly. Returns success status."""
+        self._ensure_initialized()
+        if hasattr(self.search, '_daemon_client') and self.search._daemon_client:
+            try:
+                return self.search._daemon_client.is_running() or self.search._daemon_client._start_daemon()
+            except Exception:
+                return False
+        return False
+    
+    def stop_daemon(self) -> bool:
+        """Stop search daemon if running."""
+        try:
+            import socket
+            import os
+            from .daemon.protocol import send_message, recv_message
+            
+            socket_path = os.environ.get('MEMKOSHI_SOCKET', f"/tmp/memkoshi-search-{os.getuid()}.sock")
+            
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(socket_path)
+            
+            send_message(sock, {"cmd": "shutdown"})
+            response = recv_message(sock)
+            sock.close()
+            
+            return response["status"] == "success"
+        except:
+            return False
+    
+    def daemon_status(self) -> Dict[str, Any]:
+        """Get daemon status and health info."""
+        try:
+            import socket
+            import os
+            from .daemon.protocol import send_message, recv_message
+            
+            socket_path = os.environ.get('MEMKOSHI_SOCKET', f"/tmp/memkoshi-search-{os.getuid()}.sock")
+            
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(socket_path)
+            
+            send_message(sock, {"cmd": "health"})
+            response = recv_message(sock)
+            sock.close()
+            
+            if response["status"] == "success":
+                return {"status": "running", "health": response["data"]}
+            else:
+                return {"status": "error", "error": response["error"]}
+        except:
+            return {"status": "not_running"}
     
     # ── Lifecycle ────────────────────────────────────────────
     

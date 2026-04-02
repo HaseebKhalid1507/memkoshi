@@ -216,6 +216,116 @@ def memory_stats() -> str:
     return "\n".join(lines)
 
 
+def memory_handoff_get() -> str:
+    """Get current handoff state.
+    
+    Returns:
+        Current handoff information or message if none set.
+    """
+    m = get_memkoshi()
+    handoff = m.context.get_handoff()
+    
+    if not handoff:
+        return "No handoff state set."
+    
+    lines = [
+        "=== Current Handoff ===",
+        f"Task: {handoff['task']}",
+        f"Priority: {handoff['priority']}",
+    ]
+    
+    if handoff.get('progress'):
+        lines.append(f"Progress: {handoff['progress']}")
+    
+    if handoff.get('next_steps'):
+        lines.append("Next steps:")
+        for step in handoff['next_steps']:
+            lines.append(f"  • {step}")
+    
+    lines.append(f"Created: {handoff['created_at']}")
+    
+    return "\n".join(lines)
+
+
+def memory_handoff_set(task: str, progress: str = "", details: str = "", priority: int = 3) -> str:
+    """Set handoff state for next session.
+    
+    Args:
+        task: What you're working on.
+        progress: Current status/what's been done.
+        details: Additional context or details.
+        priority: Priority level (1=high, 5=low, default=3).
+        
+    Returns:
+        Confirmation message.
+    """
+    m = get_memkoshi()
+    
+    # Parse next_steps from details if provided
+    next_steps = []
+    if details:
+        # Simple parsing: split on newlines or semicolons
+        if '\n' in details:
+            next_steps = [step.strip() for step in details.split('\n') if step.strip()]
+        elif ';' in details:
+            next_steps = [step.strip() for step in details.split(';') if step.strip()]
+    
+    m.context.set_handoff(
+        task=task,
+        progress=progress,
+        details={'raw_details': details} if details else None,
+        next_steps=next_steps,
+        priority=priority
+    )
+    
+    return f"✓ Handoff set: {task}"
+
+
+def memory_context_boot(token_budget: int = 4096) -> str:
+    """Get boot context with token budget optimization.
+    
+    Args:
+        token_budget: Maximum tokens to use (default: 4096).
+        
+    Returns:
+        Formatted boot context optimized for the token budget.
+    """
+    m = get_memkoshi()
+    boot_context = m.context.get_boot(token_budget=token_budget)
+    
+    lines = [
+        f"=== Boot Context (Budget: {token_budget} tokens) ===",
+        f"Token estimate: {boot_context.get('token_count_estimate', 0)}",
+        ""
+    ]
+    
+    if boot_context.get('handoff'):
+        h = boot_context['handoff']
+        lines.extend([
+            "🔄 Handoff:",
+            f"  Task: {h['task']}",
+        ])
+        if h.get('progress'):
+            lines.append(f"  Progress: {h['progress']}")
+        lines.append("")
+    
+    if boot_context.get('recent_sessions'):
+        lines.append("📝 Recent Sessions:")
+        for session in boot_context['recent_sessions']:
+            lines.append(f"  • {session.get('summary', '')[:80]}...")
+        lines.append("")
+    
+    stats = boot_context.get('memory_stats', {})
+    if stats:
+        lines.extend([
+            "📊 Memory Stats:",
+            f"  Total: {stats.get('total_memories', 0)}",
+            f"  Staged: {stats.get('staged_memories', 0)}"
+        ])
+    
+    return "\n".join(lines)
+
+
 # MCP server setup (only if fastmcp is available)
 if HAS_FASTMCP:
     # Create the MCP server
@@ -229,6 +339,11 @@ if HAS_FASTMCP:
     mcp.tool()(memory_approve)
     mcp.tool()(memory_reject)
     mcp.tool()(memory_stats)
+    
+    # New context management tools
+    mcp.tool()(memory_handoff_get)
+    mcp.tool()(memory_handoff_set)
+    mcp.tool()(memory_context_boot)
     
     # Export the server
     server = mcp
