@@ -371,13 +371,30 @@ def serve(storage_path, socket_path, max_memory, daemon, log_level):
     )
     
     if daemon:
-        # TODO: Add daemonization
-        pass
+        # Fork into background
+        pid = os.fork()
+        if pid > 0:
+            # Parent — print PID and exit
+            click.echo(f"✓ Daemon started (PID {pid})")
+            return
+        # Child — detach
+        os.setsid()
+        # Redirect stdio to /dev/null
+        devnull = os.open(os.devnull, os.O_RDWR)
+        os.dup2(devnull, 0)
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        os.close(devnull)
+        # Write PID file
+        pid_path = f"/tmp/memkoshi-daemon-{os.getuid()}.pid"
+        with open(pid_path, 'w') as f:
+            f.write(str(os.getpid()))
     
     try:
         daemon_instance.start()
     except KeyboardInterrupt:
-        click.echo("\nShutting down daemon...")
+        if not daemon:
+            click.echo("\nShutting down daemon...")
 
 
 @cli.command("serve-stop")
