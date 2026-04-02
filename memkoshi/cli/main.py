@@ -16,12 +16,14 @@ from ..search.engine import MemkoshiSearch
 
 
 @click.group()
-@click.option("--storage", default="~/.memkoshi", help="Storage directory")
+@click.option("--storage", default=None, help="Storage directory")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.pass_context
 def cli(ctx, storage, verbose):
     """Memkoshi - The only agent memory system that learns and improves over time."""
-    # Initialize components
+    # Priority: --storage flag > MEMKOSHI_STORAGE env > default ~/.memkoshi
+    if storage is None:
+        storage = os.environ.get('MEMKOSHI_STORAGE', '~/.memkoshi')
     storage_backend = SQLiteBackend(storage)
     
     # Store in context for subcommands
@@ -336,7 +338,7 @@ def reindex(ctx):
 
 
 @cli.command()
-@click.option('--storage-path', default='~/.memkoshi', help='Storage directory')
+@click.option('--storage-path', default=None, help='Storage directory')
 @click.option('--socket-path', help='Unix socket path (auto-generated if not specified)')
 @click.option('--max-memory', default=1024, help='Maximum memory usage in MB')
 @click.option('--daemon', is_flag=True, help='Run as background daemon')
@@ -346,6 +348,8 @@ def serve(storage_path, socket_path, max_memory, daemon, log_level):
     import logging
     import os
     
+    if storage_path is None:
+        storage_path = os.environ.get('MEMKOSHI_STORAGE', '~/.memkoshi')
     storage_path = Path(storage_path).expanduser()
     if not storage_path.exists():
         click.echo(f"Error: Storage path does not exist: {storage_path}")
