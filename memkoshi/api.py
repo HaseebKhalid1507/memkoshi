@@ -167,7 +167,7 @@ class Memkoshi:
             results = [{"id": m.id} for m in sql_results]
         
         # Record search completion event
-        self._events.record('search_complete', metadata={'results_count': len(results)})
+        self._events.record('search_complete', metadata={'query': query, 'results_count': len(results)})
         
         # Convert search results to API format
         memories = []
