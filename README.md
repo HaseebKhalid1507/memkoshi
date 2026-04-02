@@ -317,7 +317,7 @@ We don't lie about features. Here's what actually works today:
 git clone https://github.com/HaseebKhalid1507/memkoshi
 cd memkoshi
 pip install -e ".[dev]"
-pytest tests/  # Should pass 142 tests in <1s
+pytest tests/  # Should pass 239 tests in <2s
 ```
 
 We have opinions about code quality. Tests are required. Documentation is required. Breaking changes need good reasons.

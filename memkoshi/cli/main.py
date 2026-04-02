@@ -379,12 +379,15 @@ def serve(storage_path, socket_path, max_memory, daemon, log_level):
             return
         # Child — detach
         os.setsid()
-        # Redirect stdio to /dev/null
+        # Redirect stdin to /dev/null, stdout/stderr to log file
         devnull = os.open(os.devnull, os.O_RDWR)
         os.dup2(devnull, 0)
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
         os.close(devnull)
+        log_path = os.path.join(str(storage_path), 'daemon.log')
+        log_fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        os.dup2(log_fd, 1)
+        os.dup2(log_fd, 2)
+        os.close(log_fd)
         # Write PID file
         pid_path = f"/tmp/memkoshi-daemon-{os.getuid()}.pid"
         with open(pid_path, 'w') as f:

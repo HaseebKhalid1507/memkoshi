@@ -61,11 +61,20 @@ class MemkoshiDaemon:
         
         self.server_socket.bind(self.socket_path)
         self.server_socket.listen(10)
+        self.server_socket.settimeout(1.0)  # 1s timeout so we can check self.running
         
         self.running = True
         self.stats["start_time"] = time.time()
         
         logger.info(f"Daemon listening on {self.socket_path}")
+        
+        # Write socket path for clients to discover
+        ready_path = self.socket_path + ".ready"
+        try:
+            with open(ready_path, 'w') as f:
+                f.write(str(os.getpid()))
+        except Exception:
+            pass
         
         # Main request loop
         try:
@@ -73,12 +82,18 @@ class MemkoshiDaemon:
                 try:
                     client_sock, _ = self.server_socket.accept()
                     self._handle_client(client_sock)
+                except socket.timeout:
+                    continue  # Check self.running and loop
                 except OSError:
                     if self.running:
                         logger.error("Socket error in main loop")
                         break
         finally:
             self._cleanup()
+            try:
+                Path(ready_path).unlink(missing_ok=True)
+            except Exception:
+                pass
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals."""
