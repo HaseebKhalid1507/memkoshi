@@ -13,6 +13,8 @@ from ..core.session import SessionSummary
 from ..core.context import BootContext
 from ..core.context_manager import ContextManager
 from ..search.engine import MemkoshiSearch
+from ..core.patterns import PatternDetector
+from ..core.evolution import EvolutionEngine
 
 
 @click.group()
@@ -586,3 +588,149 @@ def context_boot(ctx, budget, output_json):
             click.echo(f"\n📊 Memory Stats:")
             click.echo(f"  Total: {stats.get('total_memories', 0)}")
             click.echo(f"  Staged: {stats.get('staged_memories', 0)}")
+
+
+# ── v0.4 Pattern Detection Commands ──────────────────────────────────────────
+
+@cli.group()
+@click.pass_context
+def patterns(ctx):
+    """Pattern detection and analysis."""
+    pass
+
+@patterns.command()
+@click.pass_context
+def detect(ctx):
+    """Run pattern detection."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    detector = PatternDetector(storage)
+    patterns = detector.detect()
+    
+    if not patterns:
+        click.echo("No patterns detected.")
+        return
+    
+    click.echo(f"Found {len(patterns)} patterns:")
+    for p in patterns:
+        click.echo(f"  [{p.pattern_type.upper()}] {p.name} (confidence: {p.confidence:.2f})")
+        click.echo(f"    {p.description}")
+        click.echo()
+
+@patterns.command()
+@click.pass_context
+def insights(ctx):
+    """Get pattern-based insights."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    detector = PatternDetector(storage)
+    insights = detector.insights()
+    
+    if not insights:
+        click.echo("No insights available yet.")
+        return
+    
+    click.echo("Pattern Insights:")
+    for i, insight in enumerate(insights, 1):
+        click.echo(f"  {i}. {insight}")
+
+@patterns.command()
+@click.pass_context
+def stats(ctx):
+    """Get usage statistics."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    detector = PatternDetector(storage)
+    stats = detector.stats()
+    
+    if stats.get('error'):
+        click.echo(f"Error: {stats['error']}")
+        return
+    
+    click.echo(f"Total events: {stats.get('total_events', 0)}")
+    click.echo(f"Recent activity (7d): {stats.get('recent_activity_7d', 0)}")
+    
+    events_by_type = stats.get('events_by_type', {})
+    if events_by_type:
+        click.echo("\nEvents by type:")
+        for event_type, count in events_by_type.items():
+            click.echo(f"  {event_type}: {count}")
+
+
+# ── v0.4 Evolution Commands ──────────────────────────────────────────────────
+
+@cli.group()
+@click.pass_context
+def evolve(ctx):
+    """Evolution and session scoring."""
+    pass
+
+@evolve.command()
+@click.argument("session_text")
+@click.option("--session-id", help="Session ID for storage")
+@click.pass_context
+def score(ctx, session_text, session_id):
+    """Score a session."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    engine = EvolutionEngine(storage)
+    result = engine.score(session_text, session_id)
+    
+    click.echo(f"Score: {result['score']:.1f}/10.0")
+    click.echo(f"Tasks completed: {result.get('tasks_completed', 'N/A')}")
+    click.echo(f"Errors: {result.get('errors', result.get('error_count', 'N/A'))}")
+    
+    sat_keywords = result.get('satisfaction_keywords', {})
+    if isinstance(sat_keywords, dict):
+        if sat_keywords.get('positive', 0) > 0:
+            click.echo(f"Positive sentiment: {sat_keywords['positive']}")
+        if sat_keywords.get('negative', 0) > 0:
+            click.echo(f"Negative sentiment: {sat_keywords['negative']}")
+
+@evolve.command()
+@click.pass_context
+def hints(ctx):
+    """Get behavioral improvement hints."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    engine = EvolutionEngine(storage)
+    insights = engine.hints()
+    
+    if not insights:
+        click.echo("No hints available yet.")
+        return
+    
+    click.echo("Evolution Insights:")
+    for i, insight in enumerate(insights, 1):
+        click.echo(f"  {i}. {insight}")
+
+@evolve.command()
+@click.pass_context
+def status(ctx):
+    """Get evolution status dashboard."""
+    storage = ctx.obj['storage']
+    storage.initialize()
+    
+    engine = EvolutionEngine(storage)
+    status = engine.status()
+    
+    if status.get('error'):
+        click.echo(f"Error: {status['error']}")
+        return
+    
+    click.echo(f"Recent sessions (30d): {status.get('recent_sessions_30d', 0)}")
+    click.echo(f"Average score (30d): {status.get('average_score_30d', 0.0)}")
+    click.echo(f"Trend (7d): {status.get('trend_7d', 'unknown')}")
+    
+    best = status.get('best_session', {})
+    if best.get('id'):
+        click.echo(f"Best session: {best['id']} (score: {best['score']})")
+
+
+if __name__ == '__main__':
+    cli()

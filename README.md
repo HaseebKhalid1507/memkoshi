@@ -1,12 +1,12 @@
 # Memkoshi
 
-![Tests](https://img.shields.io/badge/tests-239_passing-green) ![PyPI](https://img.shields.io/badge/PyPI-v0.3.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-321_passing-green) ![PyPI](https://img.shields.io/badge/PyPI-v0.4.0-blue) ![Python](https://img.shields.io/badge/python-3.8+-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **The only agent memory system that doesn't treat you like an idiot.**
 
 Your AI agent has the memory of a goldfish. Every conversation starts from zero. Every decision gets re-made. Every lesson gets re-learned. That ends now.
 
-Memkoshi is a production-grade memory library with **three-tier extraction architecture**, **four-layer search engine**, **context management**, **session lifecycle**, **search daemon**, and **cryptographic integrity**. Born from a real agent system that ran 100+ sessions. 53 production memories imported with 100% recall on test queries.
+Memkoshi is a production-grade memory library with **three-tier extraction architecture**, **four-layer search engine**, **pattern detection**, **evolution scoring**, **context management**, **session lifecycle**, **search daemon**, and **cryptographic integrity**. Born from a real agent system that ran 100+ sessions. 53 production memories imported with 100% recall on test queries.
 
 No vendor lock-in. No API requirements. No bullshit.
 
@@ -28,12 +28,18 @@ echo "We decided to use Rust for the backend because Python was too slow" | memk
 memkoshi review  # approve the extracted memory
 memkoshi recall "backend choice"
 # Returns: "We decided to use Rust for the backend..."
+
+# NEW in v0.4: Pattern detection & evolution tracking 🧠
+memkoshi patterns detect      # automatic behavioral patterns
+memkoshi evolve status        # performance dashboard
 ```
 
 ## Architecture: Why This Doesn't Suck
 
 ```
 Text → Extractor (hybrid/pi/api) → Staged Memories → Review → Permanent Storage → Search (VelociRAG 4-layer)
+                                                               ↓
+                                                    Event Buffer → Pattern Detection → Evolution Scoring
 ```
 
 ### 🎛️ **Three-Tier Extraction Architecture**
@@ -57,6 +63,27 @@ Not just "semantic search." The search engine combines:
 
 Results fused with RRF + cross-encoder reranking. VelociRAG is installed automatically with Memkoshi.
 
+### 🧠 **Pattern Detection** (NEW in v0.4)
+
+**Nobody else has this.** Pure SQL pattern detection that finds behavioral insights:
+
+- **Frequency patterns** — memories accessed 3+ times (what's actually important)
+- **Knowledge gaps** — search queries that fail repeatedly (what you need to learn)  
+- **Temporal patterns** — day-of-week usage habits (when you work best)
+
+Zero ML dependencies. Pure regex + SQL analysis. Works offline. Learns from *your* behavior, not corporate training data.
+
+### 📈 **Evolution Scoring** (NEW in v0.4)
+
+**The only memory system that tracks if you're getting better.** Session scoring from 1.0-10.0 based on:
+
+- Task completion rates
+- Error counts  
+- Memory system usage
+- Duration efficiency
+
+Generates behavioral improvement hints from your high-performing sessions. **Concrete metrics, not fuzzy feelings.**
+
 ### 🔒 **HMAC Cryptographic Signing**
 
 Every memory is signed with HMAC-SHA256. Tamper detection. Integrity verification. Because if you can't trust your memory system, you can't trust anything.
@@ -73,12 +100,12 @@ Every other "AI memory" solution is either:
 - **Vector databases** (no extraction, just embedding storage)
 - **LLM-only extractors** (expensive, unreliable, need API keys)
 
-We built something different. Something that works locally, extracts intelligently at any budget, and lets you stay in control.
+We built something different. Something that works locally, extracts intelligently at any budget, learns from your patterns, and lets you stay in control.
 
 ## The Staging Workflow (The Killer Feature)
 
 ```
-Conversation → Extract → Stage → Review → Memory → Search
+Conversation → Extract → Stage → Review → Memory → Search → Pattern Detection → Evolution Scoring
 ```
 
 Nobody else has the staging step. Everyone else trusts the AI extractor completely. We don't, because we're not idiots.
@@ -93,6 +120,15 @@ memkoshi review
 
 # Search approved memories
 memkoshi recall "database decision"
+
+# NEW v0.4: Automatic pattern detection & evolution
+memkoshi patterns insights
+# 1. Most frequently accessed: PostgreSQL Decision (5 times)
+# 2. Found 2 recurring knowledge gaps - consider adding content for these topics
+
+memkoshi evolve hints
+# 1. High-scoring sessions have 85% task completion vs 67% average
+# 2. Best sessions actively use the memory system
 ```
 
 ## Context & Handoff
@@ -155,11 +191,19 @@ for memory in staged:
 results = m.recall("websockets", limit=5)
 for memory in results:
     print(f"[{memory['confidence']}] {memory['title']}")
+
+# NEW v0.4: Pattern detection (automatic)
+patterns = m.patterns.detect()
+insights = m.patterns.insights()
+
+# NEW v0.4: Evolution scoring
+score = m.evolve.score({"tasks_completed": 7, "tasks_attempted": 8, "errors": 1})
+hints = m.evolve.hints()
 ```
 
 ## MCP Server Integration
 
-Memkoshi ships a full MCP server with 10 tools. Any MCP-compatible agent gets persistent memory out of the box.
+Memkoshi ships a full MCP server with **15 tools** (was 10, now 15 with v0.4). Any MCP-compatible agent gets persistent memory out of the box.
 
 ### Claude Code / pi
 
@@ -190,6 +234,11 @@ That's it. Your agent now has access to:
 | `memory_handoff_get` | Get current handoff state |
 | `memory_handoff_set` | Set handoff for next session |
 | `memory_context_boot` | Get token-budgeted boot context |
+| **NEW:** `memory_patterns` | **Detected behavioral patterns** |
+| **NEW:** `memory_insights` | **Recommendations from patterns** |
+| **NEW:** `memory_evolve_score` | **Score a session** |
+| **NEW:** `memory_evolve_hints` | **Behavioral improvement hints** |
+| **NEW:** `memory_evolve_status` | **Performance dashboard** |
 
 ### Custom Storage Path
 
@@ -236,16 +285,18 @@ The real power: point multiple agents at the same storage. Claude Code and Gemin
 | **No API keys required** | ✅ | ❌ | ❌ | ✅ | ✅ |
 | **Structured extraction** | ✅ | ✅ | ❌ | ❌ | ❌ |
 | **Knowledge graph** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Pattern detection** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Evolution scoring** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Cryptographic signing** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Cross-session persistence** | ✅ | ✅ | ✅ | ✅ | ❌ |
 
-**Memkoshi**: Local extraction → staging workflow → cryptographically signed → four-layer search  
+**Memkoshi**: Local extraction → staging workflow → cryptographically signed → four-layer search → pattern detection → evolution scoring  
 **Mem0**: Cloud LLM extraction → direct storage → vector search  
 **Zep**: Session summaries → cloud storage → basic search  
 **Letta**: Full agent framework (not modular memory), heavy dependencies  
 **LangChain**: Conversation buffer only, no extraction, no persistence
 
-We're the only one with local-first architecture, human-in-the-loop approval, and multi-tier extraction.
+We're the only one with local-first architecture, human-in-the-loop approval, multi-tier extraction, **pattern detection, and evolution scoring**.
 
 ## Install & Quick Start
 
@@ -264,6 +315,10 @@ memkoshi review
 
 # Search your memories  
 memkoshi recall "typescript decision"
+
+# NEW v0.4: Pattern detection & evolution
+memkoshi patterns detect      # find behavioral patterns
+memkoshi evolve status        # performance dashboard
 
 # Check system status
 memkoshi boot
@@ -286,9 +341,47 @@ memkoshi handoff set        # Set handoff state
 memkoshi handoff show       # Show current handoff
 memkoshi handoff clear      # Clear handoff
 memkoshi context boot       # Get boot context
+
+# NEW v0.4: Pattern detection commands
+memkoshi patterns detect    # Detect behavioral patterns
+memkoshi patterns insights  # Human-readable recommendations  
+memkoshi patterns stats     # Usage statistics
+
+# NEW v0.4: Evolution commands
+memkoshi evolve score       # Score a session
+memkoshi evolve hints       # Get improvement hints
+memkoshi evolve status      # Performance dashboard
 ```
 
-## What v0.3 Actually Has
+## API Reference
+
+### Core Memory Operations
+
+- `mk.commit(text)` → Extract and stage memories
+- `mk.recall(query, limit=10)` → List[Memory] (4-layer search)
+- `mk.list_staged()` → List[StagedMemory] 
+- `mk.approve(memory_id)` → bool
+- `mk.reject(memory_id)` → bool
+
+### Context & Handoff
+
+- `mk.context.set_handoff(...)` → Set session handoff state
+- `mk.context.get_handoff()` → Dict (current handoff)
+- `mk.context.get_boot(token_budget)` → str (boot context)
+
+### NEW v0.4: Pattern Detection
+
+- `mk.patterns.detect()` → List[Pattern]
+- `mk.patterns.insights()` → List[str]  
+- `mk.patterns.stats()` → Dict
+
+### NEW v0.4: Evolution Scoring
+
+- `mk.evolve.score(input, session_id)` → Dict
+- `mk.evolve.hints()` → List[str]
+- `mk.evolve.status()` → Dict
+
+## What v0.4 Actually Has
 
 We don't lie about features. Here's what actually works today:
 
@@ -296,18 +389,21 @@ We don't lie about features. Here's what actually works today:
 - ✅ Four-layer VelociRAG search engine with knowledge graph
 - ✅ Staging workflow with interactive review
 - ✅ Local SQLite storage with HMAC-SHA256 signing
-- ✅ CLI, Python API, and MCP server
+- ✅ CLI, Python API, and MCP server with 15 tools
 - ✅ Memory deduplication and confidence scoring
-- ✅ **239 tests**, all passing in 0.30 seconds
+- ✅ **NEW:** Pure SQL pattern detection (frequency, gaps, temporal)
+- ✅ **NEW:** Evolution scoring system with behavioral hints
+- ✅ **NEW:** Event buffer system for performance tracking
+- ✅ **321 tests**, all passing in 0.35 seconds
 - ✅ Cross-encoder reranking and RRF fusion
-- ❌ Pattern learning from user feedback (v0.2)
-- ❌ Memory relationship graphs visualization (v0.2)
-- ❌ Bulk document import (v0.2)
+- ❌ Pattern learning from user feedback (v0.5)
+- ❌ Memory relationship graphs visualization (v0.5)
+- ❌ Bulk document import (v0.5)
 
 ## Requirements
 
 - Python 3.8+
-- ~20MB storage per 1000 memories
+- ~25MB storage per 1000 memories (increased for pattern/evolution data)
 - No internet required (except for optional pi/api extractors)
 - VelociRAG 4-layer search engine included
 
@@ -317,7 +413,7 @@ We don't lie about features. Here's what actually works today:
 git clone https://github.com/HaseebKhalid1507/memkoshi
 cd memkoshi
 pip install -e ".[dev]"
-pytest tests/  # Should pass 239 tests in <2s
+pytest tests/  # Should pass 321 tests in <2s
 ```
 
 We have opinions about code quality. Tests are required. Documentation is required. Breaking changes need good reasons.
@@ -328,4 +424,4 @@ MIT. Because lock-in is for losers.
 
 ---
 
-**Built by agents, for agents. Memory is the foundation of intelligence.**
+**Built by agents, for agents. Memory is the foundation of intelligence. Evolution is the foundation of improvement.**

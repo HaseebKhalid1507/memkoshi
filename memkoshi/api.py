@@ -46,6 +46,9 @@ class Memkoshi:
         self.pipeline = None
         self.search = None
         self._context_manager = None
+        self._pattern_detector = None
+        self._evolution_engine = None
+        self._event_buffer = None
         self._initialized = False
     
     def init(self) -> None:
@@ -89,6 +92,33 @@ class Memkoshi:
             self._context_manager = ContextManager(self.storage)
         return self._context_manager
     
+    @property
+    def patterns(self):
+        """Lazy-loaded pattern detector."""
+        if self._pattern_detector is None:
+            self._ensure_initialized()
+            from .core.patterns import PatternDetector
+            self._pattern_detector = PatternDetector(self.storage)
+        return self._pattern_detector
+    
+    @property
+    def evolve(self):
+        """Lazy-loaded evolution engine."""
+        if self._evolution_engine is None:
+            self._ensure_initialized()
+            from .core.evolution import EvolutionEngine
+            self._evolution_engine = EvolutionEngine(self.storage)
+        return self._evolution_engine
+    
+    @property
+    def _events(self):
+        """Lazy-loaded event buffer."""
+        if self._event_buffer is None:
+            self._ensure_initialized()
+            from .core.events import EventBuffer
+            self._event_buffer = EventBuffer(self.storage)
+        return self._event_buffer
+    
     def boot(self) -> Dict[str, Any]:
         """Get boot context with current state.
         
@@ -126,12 +156,18 @@ class Memkoshi:
         """
         self._ensure_initialized()
         
+        # Record search event (non-blocking)
+        self._events.record('search', metadata={'query': query, 'limit': limit})
+        
         # Use the search engine, fall back to SQL if semantic returns empty
         results = self.search.search(query, limit=limit)
         if not results:
             # Fallback to SQL LIKE search
             sql_results = self.storage.search_memories(query, limit=limit)
             results = [{"id": m.id} for m in sql_results]
+        
+        # Record search completion event
+        self._events.record('search_complete', metadata={'results_count': len(results)})
         
         # Convert search results to API format
         memories = []
@@ -191,6 +227,13 @@ class Memkoshi:
         # Process through pipeline
         result = self.pipeline.process(text)
         
+        # Record commit event
+        self._events.record('commit', metadata={
+            'text_length': len(text),
+            'extracted_count': result['extracted_count'],
+            'staged_count': result['staged_count']
+        })
+        
         # Track session using new context system
         session_summary = f"{text[:100]}... ({result['staged_count']} memories)"
         self.context.add_session(session_summary, extracted_count=result['extracted_count'])
@@ -238,6 +281,9 @@ class Memkoshi:
         # Approve it (this should move it to permanent storage)
         self.storage.approve_memory(memory_id, "api")
         
+        # Record approval event
+        self._events.record('approve', target_id=memory_id)
+        
         # Get the approved memory and index it
         approved_memory = self.storage.get_memory(memory_id)
         if approved_memory:
@@ -259,6 +305,9 @@ class Memkoshi:
         staged = self.storage.list_staged()
         if not any(m.id == memory_id for m in staged):
             raise ValueError(f"Staged memory {memory_id} not found")
+        
+        # Record rejection event
+        self._events.record('reject', target_id=memory_id, metadata={'reason': reason})
         
         self.storage.reject_memory(memory_id, reason)
     

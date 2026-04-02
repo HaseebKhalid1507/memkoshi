@@ -326,6 +326,126 @@ def memory_context_boot(token_budget: int = 4096) -> str:
     return "\n".join(lines)
 
 
+# ── v0.4 Pattern Detection & Evolution Tools ──────────────────────────────────────────────
+
+def memory_patterns() -> str:
+    """Get detected behavioral patterns.
+    
+    Returns:
+        Formatted patterns as text.
+    """
+    m = get_memkoshi()
+    patterns = m.patterns.detect()
+    
+    if not patterns:
+        return "No patterns detected yet."
+    
+    lines = ["=== Behavioral Patterns ===", ""]
+    for p in patterns:
+        lines.extend([
+            f"[{p.pattern_type.upper()}] {p.name}",
+            f"  {p.description}",
+            f"  Confidence: {p.confidence:.2f} (n={p.sample_size})",
+            ""
+        ])
+    
+    return "\n".join(lines)
+
+
+def memory_insights() -> str:
+    """Get pattern-based behavioral insights.
+    
+    Returns:
+        Formatted insights as text.
+    """
+    m = get_memkoshi()
+    insights = m.patterns.insights()
+    
+    if not insights:
+        return "No insights available yet. Need more usage data."
+    
+    lines = ["=== Pattern Insights ===", ""]
+    for i, insight in enumerate(insights, 1):
+        lines.append(f"{i}. {insight}")
+    
+    return "\n".join(lines)
+
+
+def memory_evolve_score(session_input: str, session_id: str = None) -> str:
+    """Score a session for evolution tracking.
+    
+    Args:
+        session_input: Session text or structured data
+        session_id: Optional session ID for storage
+        
+    Returns:
+        Formatted scoring results.
+    """
+    m = get_memkoshi()
+    result = m.evolve.score(session_input, session_id)
+    
+    method = 'structured' if isinstance(session_input, dict) else 'keyword heuristics'
+    
+    lines = [
+        "=== Session Score ===",
+        f"Score: {result['score']:.1f}/10.0",
+        f"Task completion: {result.get('tasks_completed', 'N/A')}",
+        f"Errors: {result.get('errors', result.get('error_count', 'N/A'))}",
+        f"Analysis method: {method}"
+    ]
+    
+    return "\n".join(lines)
+
+
+def memory_evolve_hints() -> str:
+    """Get behavioral improvement hints.
+    
+    Returns:
+        Formatted improvement hints.
+    """
+    m = get_memkoshi()
+    insights = m.evolve.hints()
+    
+    if not insights:
+        return "No insights available yet. Need more session data."
+    
+    lines = ["=== Evolution Insights ===", ""]
+    for i, insight in enumerate(insights, 1):
+        lines.append(f"{i}. {insight}")
+    
+    return "\n".join(lines)
+
+
+def memory_evolve_status() -> str:
+    """Get evolution status and performance dashboard.
+    
+    Returns:
+        Formatted evolution status.
+    """
+    m = get_memkoshi()
+    status = m.evolve.status()
+    
+    if status.get('error'):
+        return f"Error: {status['error']}"
+    
+    lines = [
+        "=== Evolution Status ===",
+        f"Recent sessions (30d): {status.get('recent_sessions_30d', 0)}",
+        f"Average score (30d): {status.get('average_score_30d', 0.0)}",
+        f"Performance trend: {status.get('trend_7d', 'unknown')}",
+        ""
+    ]
+    
+    best = status.get('best_session', {})
+    if best.get('id'):
+        lines.extend([
+            f"Best session: {best['id']}",
+            f"Best score: {best['score']}"
+        ])
+    
+    return "\n".join(lines)
+
+
 # MCP server setup (only if fastmcp is available)
 if HAS_FASTMCP:
     # Create the MCP server
@@ -344,6 +464,13 @@ if HAS_FASTMCP:
     mcp.tool()(memory_handoff_get)
     mcp.tool()(memory_handoff_set)
     mcp.tool()(memory_context_boot)
+    
+    # v0.4 Pattern detection and evolution tools
+    mcp.tool()(memory_patterns)
+    mcp.tool()(memory_insights)
+    mcp.tool()(memory_evolve_score)
+    mcp.tool()(memory_evolve_hints)
+    mcp.tool()(memory_evolve_status)
     
     # Export the server
     server = mcp

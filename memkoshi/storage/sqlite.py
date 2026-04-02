@@ -2,9 +2,12 @@
 
 import sqlite3
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from .base import StorageBackend
 from ..core.memory import Memory, MemoryCategory, MemoryConfidence
@@ -25,8 +28,8 @@ class SQLiteBackend(StorageBackend):
         # Create directory if it doesn't exist
         self.base_path.mkdir(parents=True, exist_ok=True)
         
-        # Create database connection and keep it open
-        self.conn = sqlite3.connect(self.db_path)
+        # Create database connection and keep it open with thread safety
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         
         # Enable WAL mode for better concurrency
         self.conn.execute("PRAGMA journal_mode=WAL")
@@ -164,6 +167,10 @@ class SQLiteBackend(StorageBackend):
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_checkpoints_created ON checkpoints(created_at)")
 
         self.conn.commit()
+        
+        # Run v0.4 migration to add new tables
+        from .migrations import migrate_to_v04
+        migrate_to_v04(str(self.base_path))
     
     
     def _check_conn(self) -> None:
@@ -1016,3 +1023,161 @@ class SQLiteBackend(StorageBackend):
             })
         
         return results
+    
+    # ── v0.4 Pattern Detection & Evolution Methods ─────────────────
+    
+    def record_event(self, event_type: str, target_id: str = None, 
+                    metadata: Dict[str, Any] = None, session_id: str = None,
+                    confidence: float = 1.0) -> None:
+        """Record event with error handling.
+        
+        Args:
+            event_type: Type of event (search, commit, approve, reject, etc.)
+            target_id: Optional memory_id, session_id, etc.
+            metadata: Optional event metadata dict
+            session_id: Optional session identifier
+            confidence: Event confidence score (0.0-1.0)
+        """
+        try:
+            self._check_conn()
+            cursor = self.conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO events (event_type, target_id, metadata, timestamp, session_id, confidence)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                event_type,
+                target_id,
+                json.dumps(metadata) if metadata else None,
+                datetime.now(timezone.utc).isoformat(),
+                session_id,
+                confidence
+            ))
+            
+            self.conn.commit()
+            
+        except (sqlite3.Error, json.JSONDecodeError) as e:
+            # Log error but don't crash caller
+            logger.warning(f"Event recording failed: {e}")
+    
+    def record_event_batch(self, events: List[Dict[str, Any]]) -> None:
+        """Batch record events for better performance.
+        
+        Args:
+            events: List of event dictionaries
+        """
+        try:
+            self._check_conn()
+            cursor = self.conn.cursor()
+            
+            cursor.executemany("""
+                INSERT INTO events (event_type, target_id, metadata, timestamp, session_id, confidence)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [
+                (
+                    event['event_type'],
+                    event['target_id'], 
+                    json.dumps(event['metadata']) if event.get('metadata') else None,
+                    event['timestamp'],
+                    event['session_id'],
+                    event.get('confidence', 1.0)
+                ) for event in events
+            ])
+            
+            self.conn.commit()
+            
+        except (sqlite3.Error, KeyError, json.JSONDecodeError) as e:
+            # Fail silently - event recording should never crash the system
+            logger.warning(f"Event batch recording failed: {e}")
+    
+    def get_events(self, since: datetime = None, event_type: str = None, 
+                  limit: int = 1000) -> List[Dict[str, Any]]:
+        """Get events with error handling.
+        
+        Args:
+            since: Optional datetime filter
+            event_type: Optional event type filter
+            limit: Maximum number of events to return
+            
+        Returns:
+            List of event dictionaries
+        """
+        try:
+            self._check_conn()
+            cursor = self.conn.cursor()
+            
+            where_clauses = []
+            params = []
+            
+            if since:
+                where_clauses.append("timestamp >= ?")
+                params.append(since.isoformat())
+            
+            if event_type:
+                where_clauses.append("event_type = ?")
+                params.append(event_type)
+            
+            where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+            
+            cursor.execute(f"""
+                SELECT event_type, target_id, metadata, timestamp, session_id, confidence
+                FROM events {where_sql}
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, params + [limit])
+            
+            events = []
+            for row in cursor.fetchall():
+                try:
+                    metadata = json.loads(row[2]) if row[2] else {}
+                except json.JSONDecodeError:
+                    metadata = {}
+                    
+                events.append({
+                    'event_type': row[0],
+                    'target_id': row[1],
+                    'metadata': metadata,
+                    'timestamp': row[3],
+                    'session_id': row[4],
+                    'confidence': row[5] or 1.0
+                })
+            
+            return events
+            
+        except sqlite3.Error:
+            return []  # Never crash on data retrieval
+    
+    def store_evolution_session(self, session_id: str, session_data: Dict[str, Any]) -> None:
+        """Store evolution session with error handling.
+        
+        Args:
+            session_id: Session identifier
+            session_data: Session metrics and analysis data
+        """
+        try:
+            self._check_conn()
+            cursor = self.conn.cursor()
+            
+            cursor.execute("""
+                INSERT OR REPLACE INTO evolution_sessions (
+                    session_id, score, task_completion_rate, error_count,
+                    satisfaction_keywords, duration_minutes, memories_committed,
+                    memories_recalled, insights, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                session_id,
+                session_data.get('score', 5.0),
+                session_data.get('task_completion_rate', 0.0),
+                session_data.get('errors', session_data.get('error_count', 0)),
+                json.dumps(session_data.get('satisfaction_keywords', {})),
+                session_data.get('duration_minutes', 60),
+                session_data.get('memories_committed', 0),
+                session_data.get('memories_recalled', 0),
+                json.dumps(session_data.get('insights', [])),
+                datetime.now(timezone.utc).isoformat()
+            ))
+            
+            self.conn.commit()
+            
+        except (sqlite3.Error, json.JSONEncodeError) as e:
+            logger.warning(f"Evolution session storage failed: {e}")
