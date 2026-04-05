@@ -19,9 +19,16 @@ dev = [
     "pytest>=7.0.0",
     "pyyaml>=6.0.0",
 ]
+stelline = [
+    "stelline>=2.0.0",
+]
 
 [project.scripts]
 memkoshi = "memkoshi.cli.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["memkoshi*"]
 
 [build-system]
 requires = ["setuptools>=45", "wheel"]

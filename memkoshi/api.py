@@ -85,6 +85,14 @@ class Memkoshi:
         self._initialized = True
     
     @property
+    def stelline(self):
+        """Session intelligence interface (requires: pip install memkoshi[stelline])."""
+        if not hasattr(self, '_stelline_bridge') or self._stelline_bridge is None:
+            from .stelline_bridge import StellineBridge
+            self._stelline_bridge = StellineBridge(self)
+        return self._stelline_bridge
+
+    @property
     def context(self) -> ContextManager:
         """Access to unified context management."""
         if self._context_manager is None:
