@@ -98,3 +98,58 @@ class StellineBridge:
         """
         self._ensure_stelline()
         return self._tracker.get_recent_runs(limit)
+
+    def add_context(self, name: str, path: str, instruction: str) -> None:
+        """Register a context file for Stelline to maintain during harvest.
+        
+        After extracting memories (Pass 1), Stelline will update registered
+        context files based on what it learned (Pass 2, same conversation).
+        
+        Args:
+            name: Short identifier (e.g., "projects", "people").
+            path: File path to maintain.
+            instruction: How to update this file (e.g., "Track project statuses").
+        """
+        import sqlite3
+        db_path = str(self._mk.storage_path / 'memkoshi.db')
+        db = sqlite3.connect(db_path)
+        db.execute('''CREATE TABLE IF NOT EXISTS stelline_contexts (
+            name TEXT PRIMARY KEY,
+            path TEXT NOT NULL,
+            instruction TEXT NOT NULL,
+            enabled INTEGER DEFAULT 1
+        )''')
+        db.execute(
+            'INSERT OR REPLACE INTO stelline_contexts (name, path, instruction) VALUES (?, ?, ?)',
+            (name, path, instruction)
+        )
+        db.commit()
+        db.close()
+
+    def remove_context(self, name: str) -> None:
+        """Remove a registered context file."""
+        import sqlite3
+        db_path = str(self._mk.storage_path / 'memkoshi.db')
+        db = sqlite3.connect(db_path)
+        db.execute('DELETE FROM stelline_contexts WHERE name = ?', (name,))
+        db.commit()
+        db.close()
+
+    def list_contexts(self) -> list:
+        """List all registered context files."""
+        import sqlite3
+        db_path = str(self._mk.storage_path / 'memkoshi.db')
+        try:
+            db = sqlite3.connect(db_path)
+            db.execute('''CREATE TABLE IF NOT EXISTS stelline_contexts (
+                name TEXT PRIMARY KEY,
+                path TEXT NOT NULL,
+                instruction TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1
+            )''')
+            cursor = db.execute('SELECT name, path, instruction, enabled FROM stelline_contexts')
+            result = [{'name': r[0], 'path': r[1], 'instruction': r[2], 'enabled': bool(r[3])} for r in cursor.fetchall()]
+            db.close()
+            return result
+        except Exception:
+            return []
