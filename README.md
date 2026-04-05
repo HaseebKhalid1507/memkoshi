@@ -269,27 +269,13 @@ memkoshi evolve hints            # Get improvement hints
 memkoshi evolve status           # Performance dashboard
 ```
 
-## vs. The Competition
+## Related Projects
 
-| Feature | Memkoshi | Mem0 | Zep | Letta |
-|---------|----------|------|-----|-------|
-| **Staging workflow** | ✅ | ❌ | ❌ | ❌ |
-| **Local-first** | ✅ | ❌ | ❌ | ✅ |
-| **Multi-tier extraction** | ✅ | ❌ | ❌ | ❌ |
-| **No API keys required** | ✅ | ❌ | ❌ | ✅ |
-| **Four-layer search** | ✅ | ❌ | ❌ | ❌ |
-| **Pattern detection** | ✅ | ❌ | ❌ | ❌ |
-| **Evolution scoring** | ✅ | ❌ | ❌ | ❌ |
-| **Session lifecycle** | ✅ | ❌ | ❌ | ❌ |
-| **MCP integration** | ✅ | ❌ | ❌ | ❌ |
-| **Cryptographic signing** | ✅ | ❌ | ❌ | ❌ |
+Memkoshi is part of a modular AI agent infrastructure stack:
 
-**Memkoshi**: Staging gates + Local-first + Pattern intelligence  
-**Mem0**: Cloud LLM extraction → direct storage  
-**Zep**: Enterprise cloud only, $80-150/month (open-source version discontinued)  
-**Letta**: Full agent framework (not modular)
-
-We're the only one with human-in-the-loop approval, local intelligence, and cross-session learning.
+- **[VelociRAG](https://github.com/HaseebKhalid1507/VelociRAG)** — 4-layer RAG search engine. Powers Memkoshi's read path.
+- **[Stelline](https://github.com/HaseebKhalid1507/Stelline)** — Session intelligence. Crafts memories from conversation logs. Powers Memkoshi's write path (`pip install memkoshi[stelline]`).
+- **[Glyph](https://github.com/HaseebKhalid1507/Glyph)** — MCP security scanner and runtime protection.
 
 ## Installation
 
