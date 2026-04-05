@@ -296,7 +296,40 @@ class Memkoshi:
         approved_memory = self.storage.get_memory(memory_id)
         if approved_memory:
             self.search.index_memory(approved_memory)
+            self._export_memory_md(approved_memory)
     
+    def _export_memory_md(self, memory) -> None:
+        """Export approved memory as .md file for jawz-search indexing."""
+        export_dir = Path(self.storage_path).parent / "exports"
+        if os.environ.get('MEMKOSHI_EXPORT_DIR'):
+            export_dir = Path(os.environ['MEMKOSHI_EXPORT_DIR'])
+        export_dir.mkdir(parents=True, exist_ok=True)
+        
+        cat = memory.category.value if hasattr(memory.category, 'value') else str(memory.category)
+        conf = memory.confidence.value if hasattr(memory.confidence, 'value') else str(memory.confidence)
+        related = memory.related_topics if isinstance(memory.related_topics, list) else []
+        created = memory.created.isoformat() if hasattr(memory.created, 'isoformat') else str(memory.created)
+        
+        md = f"""---
+category: {cat}
+confidence: {conf}
+created: '{created}'
+id: {memory.id}
+topic: {memory.topic}
+related_topics: {related}
+---
+
+# {memory.title}
+
+## Abstract
+{memory.abstract}
+
+## Content
+{memory.content}
+"""
+        filepath = export_dir / f"{memory.topic}_{memory.id}.md"
+        filepath.write_text(md)
+
     def reject(self, memory_id: str, reason: str = "") -> None:
         """Reject a staged memory.
         
@@ -320,12 +353,16 @@ class Memkoshi:
         self.storage.reject_memory(memory_id, reason)
     
     def approve_all(self, reviewer: str = "api") -> int:
-        """Approve all staged memories and reindex. Returns count approved."""
+        """Approve all staged memories and index new ones. Returns count approved."""
         self._ensure_initialized()
-        count = self.storage.approve_all(reviewer)
-        if count > 0:
-            self.search.reindex_all(self.storage)
-        return count
+        approved_ids = self.storage.approve_all(reviewer)
+        # Index only the newly approved memories, not the entire store
+        for memory_id in approved_ids:
+            memory = self.storage.get_memory(memory_id)
+            if memory:
+                self.search.index_memory(memory)
+                self._export_memory_md(memory)
+        return len(approved_ids)
 
     def reject_all(self, reason: str = "") -> int:
         """Reject all staged memories. Returns count rejected."""

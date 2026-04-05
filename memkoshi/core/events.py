@@ -112,6 +112,8 @@ class EventBuffer:
             import sqlite3
             # Create thread-local connection (SQLite connections aren't thread-safe)
             conn = sqlite3.connect(str(self.storage.db_path))
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA synchronous=NORMAL')
             cursor = conn.cursor()
             cursor.executemany(
                 "INSERT INTO events (event_type, target_id, metadata, timestamp, session_id, confidence) VALUES (?, ?, ?, ?, ?, ?)",

@@ -15,6 +15,14 @@ from ..core.session import Session, SessionSummary
 from ..core.context import BootContext
 
 
+def _wal_connect(db_path, **kwargs):
+    """Open SQLite connection with WAL mode for better concurrent read/write performance."""
+    conn = sqlite3.connect(db_path, **kwargs)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA synchronous=NORMAL')
+    return conn
+
+
 class SQLiteBackend(StorageBackend):
     """SQLite-based storage backend."""
     
@@ -29,10 +37,7 @@ class SQLiteBackend(StorageBackend):
         self.base_path.mkdir(parents=True, exist_ok=True)
         
         # Create database connection and keep it open with thread safety
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        
-        # Enable WAL mode for better concurrency
-        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn = _wal_connect(self.db_path, check_same_thread=False)
         
         # Set busy timeout to 5 seconds
         self.conn.execute("PRAGMA busy_timeout=5000")
@@ -323,7 +328,7 @@ class SQLiteBackend(StorageBackend):
         offset: int = 0
     ) -> List[Memory]:
         """List memories with filtering."""
-        conn = sqlite3.connect(self.db_path)
+        conn = _wal_connect(self.db_path)
         cursor = self.conn.cursor()
         
         # Build query with filters
@@ -450,7 +455,7 @@ class SQLiteBackend(StorageBackend):
         since: Optional[datetime] = None
     ) -> List[Session]:
         """List sessions chronologically."""
-        conn = sqlite3.connect(self.db_path)
+        conn = _wal_connect(self.db_path)
         cursor = self.conn.cursor()
         
         query = """
@@ -801,8 +806,8 @@ class SQLiteBackend(StorageBackend):
         self.conn.commit()
         return staged_ids
     
-    def approve_all(self, reviewer: str) -> int:
-        """Approve all pending staged memories."""
+    def approve_all(self, reviewer: str) -> list:
+        """Approve all pending staged memories. Returns list of approved IDs."""
         cursor = self.conn.cursor()
         
         # Get all pending staged memories
@@ -815,6 +820,7 @@ class SQLiteBackend(StorageBackend):
         """)
         
         rows = cursor.fetchall()
+        approved_ids = [row[0] for row in rows]
         
         # Insert all into memories table
         for row in rows:
@@ -833,10 +839,9 @@ class SQLiteBackend(StorageBackend):
             WHERE review_status = 'pending'
         """, (f"Batch approved by {reviewer}",))
         
-        approved_count = cursor.rowcount
         self.conn.commit()
         
-        return approved_count
+        return approved_ids
     
     def reject_all(self, reason: str) -> int:
         """Reject all pending staged memories."""

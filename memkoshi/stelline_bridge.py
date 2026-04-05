@@ -113,6 +113,8 @@ class StellineBridge:
         import sqlite3
         db_path = str(self._mk.storage_path / 'memkoshi.db')
         db = sqlite3.connect(db_path)
+        db.execute('PRAGMA journal_mode=WAL')
+        db.execute('PRAGMA synchronous=NORMAL')
         db.execute('''CREATE TABLE IF NOT EXISTS stelline_contexts (
             name TEXT PRIMARY KEY,
             path TEXT NOT NULL,
@@ -131,6 +133,8 @@ class StellineBridge:
         import sqlite3
         db_path = str(self._mk.storage_path / 'memkoshi.db')
         db = sqlite3.connect(db_path)
+        db.execute('PRAGMA journal_mode=WAL')
+        db.execute('PRAGMA synchronous=NORMAL')
         db.execute('DELETE FROM stelline_contexts WHERE name = ?', (name,))
         db.commit()
         db.close()
@@ -141,6 +145,8 @@ class StellineBridge:
         db_path = str(self._mk.storage_path / 'memkoshi.db')
         try:
             db = sqlite3.connect(db_path)
+            db.execute('PRAGMA journal_mode=WAL')
+            db.execute('PRAGMA synchronous=NORMAL')
             db.execute('''CREATE TABLE IF NOT EXISTS stelline_contexts (
                 name TEXT PRIMARY KEY,
                 path TEXT NOT NULL,

@@ -20,7 +20,8 @@ def migrate_to_v04(storage_path: str) -> bool:
             return True
         
         conn = sqlite3.connect(str(db_path))
-        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA synchronous=NORMAL')
         
         try:
             cursor = conn.cursor()
